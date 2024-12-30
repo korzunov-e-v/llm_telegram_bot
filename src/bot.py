@@ -5,11 +5,11 @@ from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters, CallbackQueryHandler
 
+from src.check_ip import check_ip
 from src.service import Service
 
 load_dotenv()
 
-service = Service()
 bot_token = os.getenv("BOT_TOKEN")
 
 
@@ -72,16 +72,18 @@ async def user_info_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     await update.message.reply_text(message)
 
 
-app = ApplicationBuilder().token(bot_token).build()
+if __name__ == '__main__':
+    check_ip()
+    service = Service()
+    app = ApplicationBuilder().token(bot_token).build()
 
-app.add_handler(MessageHandler(filters=filters.ALL, callback=ensure_user), group=100)
-app.add_handler(CommandHandler("hello", hello_handler))
-app.add_handler(CommandHandler("clear", clear_handler))
-app.add_handler(CommandHandler("models", models_handler))
-app.add_handler(CommandHandler("info", user_info_handler))
-app.add_handler(CallbackQueryHandler(button_change_model, pattern="change_model"))
-app.add_handler(CallbackQueryHandler(button_cancel, pattern="cancel"))
-app.add_handler(MessageHandler(filters=filters.TEXT & ~filters.COMMAND, callback=text_message_handler))
+    app.add_handler(MessageHandler(filters=filters.ALL, callback=ensure_user), group=100)
+    app.add_handler(CommandHandler("hello", hello_handler))
+    app.add_handler(CommandHandler("clear", clear_handler))
+    app.add_handler(CommandHandler("models", models_handler))
+    app.add_handler(CommandHandler("info", user_info_handler))
+    app.add_handler(CallbackQueryHandler(button_change_model, pattern="change_model"))
+    app.add_handler(CallbackQueryHandler(button_cancel, pattern="cancel"))
+    app.add_handler(MessageHandler(filters=filters.TEXT & ~filters.COMMAND, callback=text_message_handler))
 
-
-app.run_polling()
+    app.run_polling()
