@@ -2,7 +2,7 @@ import datetime
 import os
 
 from anthropic import Anthropic
-from anthropic.types import MessageParam
+from anthropic.types import MessageParam, ModelParam
 from dotenv import load_dotenv
 
 from src.models import MessageRecord
@@ -21,6 +21,7 @@ class Service:
     def handle_text_message(self, user_id: int, message: str) -> str:
         client_info = self._user_contexts.get_or_create_user(user_id)
         messages = self._user_contexts.get_messages(user_id)
+        print(messages)
         user_message = MessageParam(role="user", content=message)
         input_tokens = self.count_tokens(
             model=client_info["settings"]["model"],
@@ -40,16 +41,20 @@ class Service:
 
         llm_record = MessageRecord(
             message_param=llm_message,
-            timestamp=a_dt,
+            context=messages,
+            model=response.model,
             tokens=response.usage.output_tokens,
             tokens_plus=response.usage.output_tokens,
+            timestamp=a_dt,
         )
 
         user_record = MessageRecord(
             message_param=user_message,
-            timestamp=u_dt,
+            context=messages + [user_message],
+            model=response.model,
             tokens=input_tokens,
             tokens_plus=response.usage.input_tokens,
+            timestamp=u_dt,
         )
 
         self._user_contexts.add_message(user_id, user_record)
@@ -66,6 +71,8 @@ class Service:
         return response
 
     def count_tokens(self, model: str, messages: list[MessageParam]):
+        if len(messages) == 0:
+            return 0
         response_count = self._client.messages.count_tokens(
             model=model,
             messages=messages,
@@ -73,25 +80,44 @@ class Service:
         input_tokens = response_count.input_tokens
         return input_tokens
 
+    def count_tokens_of_user_context(self, user_id: int):
+        client_info = self.get_or_create_user(user_id)
+        messages = self._user_contexts.get_messages(user_id)
+        return self.count_tokens(
+            model=client_info["settings"]["model"],
+            messages=messages,
+        )
+
     def clear_context(self, user_id: int):
         self._user_contexts.clear_context(user_id)
 
+    def change_model(self, user_id: int, model: ModelParam):
+        self._user_contexts.change_model(user_id, model)
 
-'''
-user
-    tokens-balance
-    settings
-        model
-        system-prompt
+    def get_or_create_user(self, user_id: int, username: str = "None"):
+        return self._user_contexts.get_or_create_user(user_id, username)
 
-{
-  _id: ObjectId(),
-  role: "user",
-  # content: {"type": "text", "source": {"data": base64_data, media_type: "image/jpeg", "type": "base64}},
-  content: {},
-  timestamp: time
-  tokens: 1234
-  tokens_plus: 4321
-}
+    def get_user_info_message(self, user_id):
+        user_info = self._user_contexts.get_or_create_user(user_id)
+        message_templ = (
+            "Инфо:\n"
+            "\n"
+            "Модель: {model}\n"
+            "Промпт: {prompt}\n"
+            "Токены: {tokens}\n"
+            "Контекст:\n"
+            "    сообщений: {context_len}\n"
+            "    токенов: {context_tokens}\n"
+        )
+        messages = self._user_contexts.get_messages(user_id)
+        context_len = len(messages)
+        context_tokens = self.count_tokens(user_info["settings"]["model"], messages)
 
-'''
+        message = message_templ.format(
+            model=user_info["settings"]["model"],
+            prompt=user_info["settings"]["system_prompt"],
+            tokens=user_info["tokens_balance"],
+            context_len=context_len,
+            context_tokens=context_tokens,
+        )
+        return message
