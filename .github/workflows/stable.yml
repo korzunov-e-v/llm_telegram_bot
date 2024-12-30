@@ -1,0 +1,46 @@
+name: deploy PROD
+on:
+  create:
+    ref_type:
+      tag: "v*.*.*"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Build and run
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set env
+        run: echo "RELEASE_VERSION=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
+      - name: test
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.HOST }}
+          username: user1
+          key: ${{ secrets.DO_CERT }}
+          port: ${{ secrets.PORT }}
+          password: ${{ secrets.PASS }}
+          script: |
+            echo ${{ env.RELEASE_VERSION }}
+            echo "ls" && ls
+            cd ~/projects/llm_telegram_bot/ && pwd
+            output=$(ssh -Tv git@github.com 2>&1); code=$?; if [ $code -ne 1 ] ; then echo "$output"; exit 1; fi
+      - name: pull build up PROD
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.HOST }}
+          username: user1
+          key: ${{ secrets.DO_CERT }}
+          port: ${{ secrets.PORT }}
+          password: ${{ secrets.PASS }}
+          script: |
+            echo "cd" && cd ~/projects/llm_telegram_bot/ && pwd
+            echo "git pull" && git pull
+            echo "git checkout git checkout tags/${{ env.RELEASE_VERSION }}" && git checkout tags/${{ env.RELEASE_VERSION }}
+            echo "sudo -S make build-prod" && echo ${{ secrets.PASS }} | sudo -S make build-prod
+            echo "sudo -S make up-prod" && echo ${{ secrets.PASS }} | sudo -S make up-prod
+            echo "git checkout master" && git checkout master
+
+concurrency:
+  group: $GITHUB_REPOSITORY

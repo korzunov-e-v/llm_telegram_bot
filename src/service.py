@@ -33,6 +33,7 @@ class Service:
         response = self.send_message(
             model=client_info["settings"]["model"],
             messages=messages + [user_message],
+            user_id=user_id,
         )
         a_dt = datetime.datetime.now(datetime.UTC)
         llm_resp_text = response.content[0].text
@@ -64,11 +65,12 @@ class Service:
 
         return llm_resp_text
 
-    def send_message(self, model: str, messages: list[MessageParam]):
+    def send_message(self, model: str, messages: list[MessageParam], user_id: int):
         response = self._client.messages.create(
             model=model,  # claude-3-5-sonnet-20241022
             max_tokens=4096,
-            messages=messages
+            messages=messages,
+            metadata={"user_id": str(user_id)},
         )
         return response
 

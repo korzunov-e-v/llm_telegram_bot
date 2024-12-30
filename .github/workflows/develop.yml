@@ -1,0 +1,41 @@
+name: deploy DEV
+on:
+  push:
+    branches:
+    - master
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Build and run
+    runs-on: ubuntu-latest
+    steps:
+      - name: test
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.HOST }}
+          username: user1
+          key: ${{ secrets.DO_CERT }}
+          port: ${{ secrets.PORT }}
+          password: ${{ secrets.PASS }}
+          script: |
+            cd ~/projects/llm_telegram_bot/ && pwd
+            echo "ls" && ls
+            output=$(ssh -Tv git@github.com 2>&1); code=$?; if [ $code -ne 1 ] ; then echo "$output"; exit 1; fi
+      - name: pull build up DEV
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.HOST }}
+          username: user1
+          key: ${{ secrets.DO_CERT }}
+          port: ${{ secrets.PORT }}
+          password: ${{ secrets.PASS }}
+          script: |
+            cd ~/projects/llm_telegram_bot/
+            git checkout master
+            git pull
+            echo ${{ secrets.PASS }} | sudo -S make build-dev
+            echo ${{ secrets.PASS }} | sudo -S make up-dev
+
+concurrency:
+  group: $GITHUB_REPOSITORY

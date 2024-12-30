@@ -337,4 +337,6 @@ $RECYCLE.BIN/
 
 /temp
 /mongo_data
+/mongo_data_dev
 /.todo
+.env.*
