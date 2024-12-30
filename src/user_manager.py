@@ -3,6 +3,7 @@ import os
 from anthropic.types import MessageParam, ModelParam
 from pymongo import MongoClient
 
+from src.custom_logging import get_logger
 from src.models import UserInfo, MessageRecord
 
 mongo_url = os.getenv("MONGO_URL")
@@ -12,11 +13,12 @@ class UserManager:
     default_model = "claude-3-haiku-20240307"
 
     def __init__(self):
+        self.logger = get_logger(__name__)
         self.mongo_client = MongoClient(mongo_url, connect=True)
         self.mongo_users_db = self.mongo_client.get_database("users")
         self.mongo_messages_db = self.mongo_client.get_database("messages")
         self.mongo_users_col = self.mongo_users_db.get_collection("info")
-        print("users in db", self.mongo_users_col.count_documents({}))
+        self.logger.info(f"users in db: {self.mongo_users_col.count_documents({})}")
 
     def add_message(self, user_id: int, message: MessageRecord) -> None:
         col = self.mongo_messages_db.get_collection(str(user_id))

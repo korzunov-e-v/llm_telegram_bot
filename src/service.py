@@ -5,6 +5,7 @@ from anthropic import Anthropic
 from anthropic.types import MessageParam, ModelParam
 from dotenv import load_dotenv
 
+from src.custom_logging import get_logger
 from src.models import MessageRecord
 from src.user_manager import UserManager
 
@@ -15,13 +16,14 @@ api_key = os.getenv("ANTHROPIC_API_KEY")
 
 class Service:
     def __init__(self):
+        self.logger = get_logger(__name__)
         self._user_contexts = UserManager()
         self._client = Anthropic(api_key=api_key)
 
     def handle_text_message(self, user_id: int, message: str) -> str:
         client_info = self._user_contexts.get_or_create_user(user_id)
         messages = self._user_contexts.get_messages(user_id)
-        print(messages)
+        self.logger.info(messages)
         user_message = MessageParam(role="user", content=message)
         input_tokens = self.count_tokens(
             model=client_info["settings"]["model"],

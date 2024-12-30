@@ -32,10 +32,8 @@ async def button_change_model(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def button_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     user_id = update.effective_user.id
-
     await query.answer()
     await query.edit_message_reply_markup(None)
-
     await query.edit_message_text(text=f"Отменено.")
 
 
