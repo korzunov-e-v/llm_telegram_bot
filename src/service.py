@@ -5,8 +5,8 @@ from anthropic import Anthropic
 from anthropic.types import MessageParam
 from dotenv import load_dotenv
 
-from models import MessageRecord
-from user_manager import UserManager
+from src.models import MessageRecord
+from src.user_manager import UserManager
 
 load_dotenv()
 

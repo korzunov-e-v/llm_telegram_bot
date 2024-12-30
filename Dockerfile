@@ -5,6 +5,8 @@ WORKDIR /srv
 COPY src /srv/src
 COPY requirements.txt /srv
 
-RUN pip install requirements.txt
+RUN pip install -r requirements.txt
 
-CMD python /srv/src/main.py
+ENV PYTHONPATH=$PYTHONPATH:/srv:/srv/src
+
+CMD python /srv/src/bot.py
