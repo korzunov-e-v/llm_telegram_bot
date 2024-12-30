@@ -1,47 +1,18 @@
 import os
-from collections import defaultdict
 
 from anthropic import Anthropic
 from anthropic.types import MessageParam
-from telegram import Update, User
+from dotenv import load_dotenv
+from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
 
-from dotenv import load_dotenv
+from user_context_manager import user_contexts
 
 load_dotenv()
 
 api_key = os.getenv("ANTHROPIC_API_KEY")
 bot_token = os.getenv("BOT_TOKEN")
 client = Anthropic(api_key=api_key)
-
-
-class UserContextManager:
-    def __init__(self):
-        self.user_contexts: defaultdict[User.id, list[MessageParam]] = defaultdict(list)
-
-    def add(self, user_id: int, message: MessageParam):
-        self.user_contexts[user_id].append(message)
-
-    def get(self, user_id: int):
-        self.verify(user_id)
-        messages = self.user_contexts[user_id]
-        return messages
-
-    def clear(self, user_id: int):
-        self.user_contexts[user_id] = []
-
-    def verify(self, user_id: int):
-        messages = self.user_contexts[user_id]
-        if not messages:
-            return
-        first_mes_role = messages[0]["role"]
-        last_mes_role = messages[-1]["role"]
-
-        assert first_mes_role == "user"
-        assert last_mes_role == "assistant"
-
-
-user_contexts = UserContextManager()
 
 
 async def hello_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -69,6 +40,8 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     user_contexts.add(update.effective_user.id, user_message)
     user_contexts.add(update.effective_user.id, llm_message)
+
+
 
     await update.message.reply_text(llm_resp_text)
 
