@@ -2,7 +2,7 @@ import requests
 
 from src.custom_logging import get_logger
 
-ip = requests.get('https://api.ipify.org').content.decode('utf8')
+# ip = requests.get('https://api.ipify.org').content.decode('utf8')
 
 logger = get_logger(__name__)
 

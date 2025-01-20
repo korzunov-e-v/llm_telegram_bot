@@ -20,12 +20,9 @@ async def hello_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 async def button_change_model(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     user_id = update.effective_user.id
-
     await query.answer()
-
     model = query.data.split("+")[1]
     service.change_model(user_id, model)
-
     await query.edit_message_text(text=f"Выбрана модель: {query.data.split("+")[1]}")
 
 
@@ -47,8 +44,10 @@ async def models_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 async def clear_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
+    message = service.get_user_info_message(user_id)
+    message += "\nКонтекст очищен."
     service.clear_context(user_id)
-    await update.message.reply_text(f'Контекст очищен.')
+    await update.message.reply_text(message)
 
 
 async def ensure_user(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -61,7 +60,7 @@ async def text_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     user_id = update.effective_user.id
     user_query = update.message.text
     llm_resp_text = service.handle_text_message(user_id, user_query)
-    await update.message.reply_text(llm_resp_text)
+    await update.message.reply_text(llm_resp_text, parse_mode="Markdown")
 
 
 async def user_info_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

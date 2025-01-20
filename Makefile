@@ -11,3 +11,12 @@ build-dev:
 build-prod:
 	TAG=$(shell git describe --contains HEAD | sed -E 's/(^v)//')
 	TAG=$(shell git describe --contains HEAD | sed -E 's/(^v)//') docker compose -f docker-compose.prod.yml build
+
+build:
+	docker compose -f docker-compose.local.yml build
+
+up:
+	docker compose -f docker-compose.local.yml up --force-recreate
+
+down:
+	docker compose -f docker-compose.local.yml down --remove-orphans

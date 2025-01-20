@@ -336,7 +336,6 @@ $RECYCLE.BIN/
 # End of https://www.toptal.com/developers/gitignore/api/python,jetbrains+all,visualstudiocode,windows,linux,virtualenv
 
 /temp
-/mongo_data
-/mongo_data_dev
+/mongo_data*
 /.todo
 .env.*

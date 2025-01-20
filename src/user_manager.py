@@ -14,7 +14,7 @@ class UserManager:
 
     def __init__(self):
         self.logger = get_logger(__name__)
-        self.mongo_client = MongoClient(mongo_url, connect=True)
+        self.mongo_client = MongoClient(mongo_url, connect=True, connectTimeoutMS=5000)
         self.mongo_users_db = self.mongo_client.get_database("users")
         self.mongo_messages_db = self.mongo_client.get_database("messages")
         self.mongo_users_col = self.mongo_users_db.get_collection("info")
