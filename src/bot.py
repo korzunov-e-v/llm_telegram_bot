@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters, CallbackQueryHandler
 
-from src.check_ip import check_ip
+from src.tools.check_ip import check_ip
 from src.service import Service
 
 load_dotenv()
