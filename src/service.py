@@ -2,7 +2,7 @@ import datetime
 import os
 
 from anthropic import Anthropic
-from anthropic.types import MessageParam, ModelParam
+from anthropic.types import MessageParam, ModelParam, TextBlockParam
 from dotenv import load_dotenv
 
 from src.tools.custom_logging import get_logger
@@ -22,7 +22,7 @@ class Service:
 
     def handle_text_message(self, user_id: int, message: str) -> str:
         client_info = self._user_contexts.get_or_create_user(user_id)
-        messages = self._user_contexts.get_messages(user_id)
+        messages = self._user_contexts.get_messages_from_db(user_id)
         self.logger.info(messages)
         user_message = MessageParam(role="user", content=message)
         input_tokens = self.count_tokens(
@@ -60,17 +60,21 @@ class Service:
             timestamp=u_dt,
         )
 
-        self._user_contexts.add_message(user_id, user_record)
-        self._user_contexts.add_message(user_id, llm_record)
+        self._user_contexts.add_message_to_db(user_id, user_record)
+        self._user_contexts.add_message_to_db(user_id, llm_record)
 
         return llm_resp_text
 
     def send_message(self, model: str, messages: list[MessageParam], user_id: int):
+        user_info = self._user_contexts.get_or_create_user(user_id)
+        system_prompt = user_info["settings"]["system_prompt"]
         response = self._client.messages.create(
-            model=model,  # claude-3-5-sonnet-20241022
+            model=model,
             max_tokens=4096,
             messages=messages,
             metadata={"user_id": str(user_id)},
+            system=[TextBlockParam(text=system_prompt, type="text")] if system_prompt else "",
+            temperature=user_info["settings"].get("temperature") or self._user_contexts.default_temperature,
         )
         return response
 
@@ -86,11 +90,27 @@ class Service:
 
     def count_tokens_of_user_context(self, user_id: int):
         client_info = self.get_or_create_user(user_id)
-        messages = self._user_contexts.get_messages(user_id)
+        messages = self._user_contexts.get_messages_from_db(user_id)
         return self.count_tokens(
             model=client_info["settings"]["model"],
             messages=messages,
         )
+
+    def set_system_prompt(self, user_id: int, prompt: str):
+        self._user_contexts.set_system_prompt(user_id, prompt)
+
+    def clear_system_prompt(self, user_id: int):
+        self._user_contexts.set_system_prompt(user_id, None)
+
+    def get_system_prompt(self, user_id: int):
+        return self._user_contexts.get_system_prompt(user_id)
+
+    def set_temperature(self, user_id: int, temperature: float):
+        self._user_contexts.set_temperature(user_id, temperature)
+
+    def reset_temperature(self, user_id: int):
+        self._user_contexts.set_temperature(user_id, None)
+
 
     def clear_context(self, user_id: int):
         self._user_contexts.clear_context(user_id)
@@ -107,19 +127,21 @@ class Service:
             "Инфо:\n"
             "\n"
             "Модель: {model}\n"
-            "Промпт: {prompt}\n"
+            'Промпт: "{prompt}"\n'
+            "Температура (от 0 до 1): {temp}\n"
             "Токены: {tokens}\n"
             "Контекст:\n"
             "    сообщений: {context_len}\n"
             "    токенов: {context_tokens}\n"
         )
-        messages = self._user_contexts.get_messages(user_id)
+        messages = self._user_contexts.get_messages_from_db(user_id)
         context_len = len(messages)
         context_tokens = self.count_tokens(user_info["settings"]["model"], messages)
 
         message = message_templ.format(
             model=user_info["settings"]["model"],
-            prompt=user_info["settings"]["system_prompt"],
+            prompt=user_info["settings"]["system_prompt"] or "",
+            temp=user_info["settings"].get("temperature") or self._user_contexts.default_temperature,
             tokens=user_info["tokens_balance"],
             context_len=context_len,
             context_tokens=context_tokens,
