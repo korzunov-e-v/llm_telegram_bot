@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "llm-telegram-bot"
+version = "0.1.0"
+description = "telegram bot for access LLM via chat"
+authors = ["Evgeniy Korzunov <korzunov.e.v@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+package-mode = false
+
+
+[tool.poetry.dependencies]
+python = "^3.12"
+python-dotenv = "^1.0.1"
+python-telegram-bot = "^21.10"
+anthropic = "^0.45.1"
+pymongo = {extras = ["srv"], version = "^4.10.1"}
+requests = "^2.32.3"
+
+
+[tool.poetry.group.dev.dependencies]
+poetry = "1.8.3"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

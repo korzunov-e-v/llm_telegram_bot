@@ -2,11 +2,21 @@ FROM python:3.12-slim
 
 WORKDIR /srv
 
-COPY requirements.txt /srv
+ENV POETRY_CACHE_DIR=/tmp/poetry_cache
 
-RUN pip install -r requirements.txt
+COPY pyproject.toml /srv
+COPY poetry.lock /srv
+
+RUN --mount=target=/var/lib/apt/lists,type=cache,mode=0777,sharing=locked \
+    --mount=target=/var/cache/apt,type=cache,mode=0777,sharing=locked \
+    --mount=target=/root/.cache/pypoetry/cache,type=cache,mode=0777,sharing=locked \
+    --mount=target=/root/.cache/pip,type=cache,mode=0777,sharing=locked \
+    rm -f /etc/apt/apt.conf.d/docker-clean && \
+    pip install poetry==1.8.3 && \
+    poetry install --without dev
 
 COPY src /srv/src
 
-ENV PYTHONPATH=$PYTHONPATH:/srv:/srv/src
-CMD python /srv/src/bot.py
+ENV PYTHONPATH=$PYTHONPATH:/srv
+
+CMD ["poetry", "run", "python", "/srv/src/bot.py"]

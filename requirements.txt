@@ -1,5 +1,0 @@
-python-dotenv
-python-telegram-bot
-anthropic
-pymongo[srv]
-requests
