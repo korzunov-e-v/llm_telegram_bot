@@ -14,7 +14,7 @@ class LLMProvider:
         messages: list[MessageParam],
         user_id: int,
         system_prompt: str = None,
-        temp: float = settings.default_temp,
+        temp: float = settings.default_temperature,
         max_tokens: int = settings.default_max_tokens
     ):
         response = self._client.messages.create(

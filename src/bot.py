@@ -125,4 +125,5 @@ def build_app(bot_token: str):
     app.add_handler(CallbackQueryHandler(button_change_model, pattern="change_model"))
     app.add_handler(CallbackQueryHandler(button_cancel, pattern="cancel"))
     app.add_handler(MessageHandler(filters=filters.TEXT & ~filters.COMMAND, callback=text_message_handler))
+    app.job_queue
     return app

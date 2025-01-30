@@ -6,9 +6,9 @@ load_dotenv()
 
 
 class Settings:
-    default_temp: float = 0.7
+    default_temperature: float = 0.7
     default_max_tokens: int = 4096
-    default_model: str = "claude-3-haiku-latest"
+    default_model: str = "claude-3-5-haiku-latest"
 
     bot_token = os.getenv("BOT_TOKEN")
     anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")

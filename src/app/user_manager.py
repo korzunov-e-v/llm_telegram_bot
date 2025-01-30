@@ -39,8 +39,11 @@ class UserManager:
             "user_id": str(user_id),
             "username": username,
             "tokens_balance": 0,
-            "settings": {"model": settings.default_model, "system_prompt": None,
-                         "temperature": settings.default_temperature},
+            "settings": {
+                "model": settings.default_model,
+                "system_prompt": None,
+                "temperature": settings.default_temperature
+            },
             "offset": 0
         }
         return doc
@@ -70,7 +73,7 @@ class UserManager:
         self.update_user(user_info)
 
     def reset_temperature(self, user_id: int):
-        self.set_temperature(user_id, settings.default_temp)
+        self.set_temperature(user_id, settings.default_temperature)
 
     def change_model(self, user_id: int, model: ModelParam) -> None:
         user_info = self.get_user(user_id)

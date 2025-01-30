@@ -31,5 +31,5 @@ class MessageRepository:
         self.__db_provider.add_user_message_record(user_id, message)
 
     def get_messages_from_db(self, user_id: int, offset: int = 0, sort=None) -> list[MessageRecord]:
-        messages_res = self.__db_provider.get_user_message_records(user_id, offset)
+        messages_res = self.__db_provider.get_user_message_records(user_id, offset, sort)
         return messages_res

@@ -26,11 +26,11 @@ class MessageProcessingFacade:
         context = self.user_manager.get_context(user_id, user_info["offset"])
 
         user_message = MessageParam(
-            content=TextBlockParam(text=message_text, type="text"),
+            content=[TextBlockParam(text=message_text, type="text")],
             role="user"
         )
         messages = context + [user_message]
-        input_sing_tokens_count = self.llm_provider.count_tokens(user_settings["model"], user_message)
+        input_sing_tokens_count = self.llm_provider.count_tokens(user_settings["model"], [user_message])
 
         u_dt = datetime.now(UTC)
         response = self.llm_provider.send_messages(
@@ -86,7 +86,7 @@ class MessageProcessingFacade:
         context_tokens = self.llm_provider.count_tokens(user_info["settings"]["model"], messages)
         message = message_templ.format(
             model=user_info["settings"]["model"],
-            prompt=user_info["settings"]["system_prompt"] or "",
+            prompt=user_info["settings"]["system_prompt"] or "<не задан>",
             temp=user_info["settings"].get("temperature") or settings.default_temperature,
             tokens=user_info["tokens_balance"],
             context_len=context_len,
