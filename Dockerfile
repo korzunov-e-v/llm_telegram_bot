@@ -19,4 +19,4 @@ COPY src /srv/src
 
 ENV PYTHONPATH=$PYTHONPATH:/srv
 
-CMD ["poetry", "run", "python", "/srv/src/bot.py"]
+CMD ["poetry", "run", "python", "/srv/src/main.py"]

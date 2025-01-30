@@ -8,6 +8,7 @@ from bson import ObjectId
 class UserSettings(TypedDict):
     model: str
     system_prompt: Optional[str]
+    temperature: float
 
 
 class UserInfo(TypedDict):
