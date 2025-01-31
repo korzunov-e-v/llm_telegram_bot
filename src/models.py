@@ -18,6 +18,7 @@ class UserInfo(TypedDict):
     tokens_balance: int
     offset: int
     settings: UserSettings
+    allowed_topics: dict
 
 
 class MessageRecord(TypedDict):

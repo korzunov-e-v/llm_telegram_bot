@@ -2,6 +2,9 @@ import logging
 import sys
 
 logging.getLogger("httpx").setLevel(logging.ERROR)
+logging.getLogger("apscheduler.executors.default").setLevel(logging.WARNING)
+logging.getLogger("apscheduler.scheduler").setLevel(logging.WARNING)
+
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     encoding="utf-8",

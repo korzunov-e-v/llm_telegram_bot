@@ -5,11 +5,33 @@ from src.models import MessageRecord, UserSettings, UserInfo
 from src.app.database import MongoManager
 
 
-class UserManager:
+class ChatManager:
     def __init__(self, db_provider: MongoManager):  # todo: abstract
         self.__db_provider = db_provider
 
-    def get_context(self, user_id, offset: int = 0) -> list[MessageParam]:
+    def get_allowed_topics(self, chat_id: int) -> list[int]:
+        topics_dict = self.get_user(chat_id).get("allowed_topics")
+        if topics_dict:
+            return [int(k) for k, v in topics_dict.items() if v]
+        else:
+            return []
+
+    def set_allowed_topics(self, chat_id: int, topics: list[int]):
+        user = self.get_user(chat_id)
+        user["allowed_topics"] = {str(k): True for k, v in topics}
+        self.update_user(user)
+
+    def add_allowed_topics(self, chat_id: int, topic: int):
+        user = self.get_user(chat_id)
+        user["allowed_topics"][str(topic)] = True
+        self.update_user(user)
+
+    def remove_allowed_topics(self, chat_id: int, topic: int):
+        user = self.get_user(chat_id)
+        user["allowed_topics"][str(topic)] = False
+        self.update_user(user)
+
+    def get_context(self, user_id: int, offset: int = 0) -> list[MessageParam]:
         message_records: list[MessageRecord] = self.__db_provider.get_user_message_records(user_id, offset)
         messages = [mes["message_param"] for mes in message_records]
         return messages
@@ -42,9 +64,10 @@ class UserManager:
             "settings": {
                 "model": settings.default_model,
                 "system_prompt": None,
-                "temperature": settings.default_temperature
+                "temperature": settings.default_temperature,
             },
-            "offset": 0
+            "offset": 0,
+            "allowed_topics": {},
         }
         return doc
 
