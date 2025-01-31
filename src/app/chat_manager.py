@@ -32,12 +32,12 @@ class ChatManager:
         self.update_user(user)
 
     def get_context(self, user_id: int, offset: int = 0) -> list[MessageParam]:
-        message_records: list[MessageRecord] = self.__db_provider.get_user_message_records(user_id, offset)
+        message_records: list[MessageRecord] = self.__db_provider.get_chat_message_records(user_id, offset)
         messages = [mes["message_param"] for mes in message_records]
         return messages
 
     def clear_context(self, user_id: int) -> None:
-        count = self.__db_provider.count_user_messages(user_id)
+        count = self.__db_provider.count_chat_messages(user_id)
         user_info = self.get_user(user_id)
         user_info["offset"] = count
         self.update_user(user_info)
