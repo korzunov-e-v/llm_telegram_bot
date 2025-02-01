@@ -337,5 +337,5 @@ $RECYCLE.BIN/
 
 /temp
 /mongo_data*
-/.todo
+/.todo.md
 .env.*

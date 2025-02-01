@@ -9,15 +9,16 @@ from src.app.service import message_processing_facade as service
 
 class TopicFilter(MessageFilter):
     def filter(self, message: Message):
-        if message.chat.is_forum and message.chat.type == ChatType.SUPERGROUP:
+        if message.chat.is_forum and message.chat.type in (ChatType.SUPERGROUP, ChatType.GROUP):
             chat_id = message.chat_id
             chat_id_minus = -1000000000000 - chat_id
             chat_id = min(chat_id, chat_id_minus)
             thread_id = message.message_thread_id
-            if not (
-                thread_id in service.user_manager.get_allowed_topics(chat_id)
-                or thread_id in service.user_manager.get_allowed_topics(chat_id_minus)
-            ):
+            if thread_id is None:
+                thread_id = 1
+            user_id = message.from_user.id
+            allowed = service.chat_manager.get_allowed_topics(chat_id, user_id)
+            if not (thread_id in allowed):
                 return False
         return True
 

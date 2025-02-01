@@ -12,25 +12,34 @@ class Settings(TypedDict):
     temperature: float
 
 
+class TopicInfo(TypedDict):
+    _id: NotRequired[ObjectId]
+    chat_id: int
+    topic_id: int
+    settings: Settings
+
+
 class ChatInfo(TypedDict):
     _id: NotRequired[ObjectId]
-    owner: ObjectId
-    topics: Optional[dict]
+    chat_id: int
+    owner_user_id: int
+    allowed_topics: dict
 
 
 class UserInfo(TypedDict):
     _id: NotRequired[ObjectId]
     user_id: int
     username: str
+    full_name: str
     tokens_balance: int
-    chats: list[ChatInfo]
 
 
 class MessageRecord(TypedDict):
     _id: NotRequired[ObjectId]
     message_param: MessageParam
-    context: list[MessageParam]
+    context_n: int
     model: ModelParam
     tokens_message: int
-    tokens_context: int
+    tokens_from_prov: int
+    user_id: int
     timestamp: datetime.datetime

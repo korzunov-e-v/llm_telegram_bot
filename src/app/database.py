@@ -1,6 +1,6 @@
 from pymongo import MongoClient
 
-from src.models import MessageRecord, UserInfo
+from src.models import MessageRecord, UserInfo, ChatInfo, TopicInfo
 from src.tools.custom_logging import get_logger
 
 
@@ -9,41 +9,87 @@ class MongoManager:
         self.logger = get_logger(__name__)
         self._client = MongoClient(url, connect=True, connectTimeoutMS=5000)
         self.users_db = self._client.get_database("users")
+        self.topics_db = self._client.get_database("topics")
         self.messages_db = self._client.get_database("messages")
-        self.users_collection = self.users_db.get_collection("user_infos")
-        self.chats_collection = self.users_db.get_collection("chat_infos")
-        self.logger.info(f"users in db: {self.users_collection.count_documents({})}")
+        self.user_info_collection = self.users_db.get_collection("user_infos")
+        self.chat_info_collection = self.users_db.get_collection("chat_infos")
+        self.logger.info(f"users in db: {self.user_info_collection.count_documents({})}")
 
-    def get_chat_message_records(self, chat_id: int, offset: int, sort=None) -> list[MessageRecord]:
+    # MESSAGES
+    def get_chat_message_records(self, chat_id: int, topic_id: int, offset: int = 0, sort=None) -> list[MessageRecord]:
+        collection_name = self.__get_mes_col_name(chat_id, topic_id)
         if sort is None:
             sort = {"timestamp": 1}
-        col_mes = self.messages_db.get_collection(str(chat_id))
+        col_mes = self.messages_db.get_collection(collection_name)
         messages_res: list[MessageRecord] = col_mes.find().sort(sort).skip(offset).to_list()
         return messages_res
 
-    def add_chat_message_record(self, chat_id: int, message_record: MessageRecord) -> None:
-        col = self.messages_db.get_collection(str(chat_id))
-        col.insert_one(document=message_record)
+    def add_chat_message_record(self, message_record: MessageRecord, chat_id: int, topic_id: int) -> None:
+        collection_name = self.__get_mes_col_name(chat_id, topic_id)
+        col_mes = self.messages_db.get_collection(collection_name)
+        col_mes.insert_one(document=message_record)
 
-    def count_chat_messages(self, chat_id: int, offset: int = 0) -> int:
-        col_mes = self.messages_db.get_collection(str(chat_id))
+    def count_topic_messages(self, chat_id: int, topic_id: int, offset: int = 0) -> int:
+        collection_name = self.__get_mes_col_name(chat_id, topic_id)
+        col_mes = self.messages_db.get_collection(collection_name)
         count = col_mes.count_documents({})
         return count - offset
 
-    def get_user(self, user_id: int) -> UserInfo | None:
-        user_info_list = self.users_collection.find({"user_id": str(user_id)}).to_list()
-        if user_info_list:
-            return user_info_list[0]
-        return None
-
-    def get_chat_info(self, user_id: int) -> UserInfo | None:
-        user_info_list = self.users_collection.find({"user_id": str(user_id)}).to_list()
-        if user_info_list:
-            return user_info_list[0]
-        return None
-
+    # USERS
     def add_user(self, user_info: UserInfo) -> None:
-        self.users_collection.insert_one(user_info)
+        self.logger.info(f"user created: {user_info}")
+        self.user_info_collection.insert_one(user_info)
 
-    def update_user(self, user_info: UserInfo) -> None:
-        self.users_collection.replace_one({"_id": user_info["_id"]}, user_info)
+    def get_user_info(self, user_id: int) -> UserInfo | None:
+        user_info_list = self.user_info_collection.find({"user_id": user_id}).to_list()
+        if user_info_list:
+            return user_info_list[0]
+        return None
+
+    # def update_user(self, user_info: UserInfo) -> None:
+    #     self.user_info_collection.replace_one({"_id": user_info["_id"]}, user_info)
+
+    # CHATS
+    def add_chat(self, chat_info: ChatInfo):
+        self.logger.info(f"chat created: {chat_info}")
+        self.chat_info_collection.insert_one(chat_info)
+
+    def get_chat_info(self, chat_id: int) -> ChatInfo | None:
+        chat_info_list = self.chat_info_collection.find({"chat_id": chat_id}).to_list()
+        if chat_info_list:
+            return chat_info_list[0]
+        return None
+
+    def get_user_chat_infos(self, user_id: int) -> list[ChatInfo] | None:
+        chat_info_list = self.chat_info_collection.find({"owner_user_id": user_id}).to_list()
+        if chat_info_list:
+            return chat_info_list
+        return None
+
+    def update_chat(self, chat_info: ChatInfo):
+        self.chat_info_collection.replace_one({"_id": chat_info["_id"]}, chat_info)
+
+    # TOPICS
+    def add_topic(self, topic_info: TopicInfo, chat_id: int):
+        self.logger.info(f"topic created: {topic_info}")
+        col = self.topics_db.get_collection(str(chat_id))
+        col.insert_one(topic_info)
+
+    def get_topic_info(self, chat_id: int, topic_id: int) -> TopicInfo | None:
+        if topic_id is None:
+            topic_id = 1
+        col = self.topics_db.get_collection(str(chat_id))
+        topic_info_list = col.find({"topic_id": topic_id}).to_list()
+        if topic_info_list:
+            return topic_info_list[0]
+        return None
+
+    def update_topic_info(self, topic_info: TopicInfo, chat_id: int):
+        col = self.topics_db.get_collection(str(chat_id))
+        col.replace_one({"_id": topic_info["_id"]}, topic_info)
+
+    @staticmethod
+    def __get_mes_col_name(chat_id: int, topic_id: int) -> str:
+        if topic_id is None:
+            topic_id = 1
+        return f"{chat_id}+{topic_id}"
