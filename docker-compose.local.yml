@@ -4,6 +4,7 @@ services:
   bot:
     build:
       context: .
+      target: runtime
     image:
       llm_telegram_bot-bot
     env_file:
