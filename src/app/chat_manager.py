@@ -1,6 +1,7 @@
 from contextlib import suppress
 
 from anthropic.types import MessageParam, ModelParam
+from telegram import Bot
 
 from src.config import settings
 from src.models import MessageRecord, UserInfo, ChatInfo, TopicInfo, Settings
@@ -47,6 +48,17 @@ class ChatManager:
         topic_info["settings"]["offset"] = count
         self.update_topic_info(topic_info)
 
+    def get_tokens_used(self, user_id: int):
+        collections = self._db_provider.messages_db.list_collections(filter={'name': {'$regex': f'^{user_id}'}}).to_list()
+        count = 0
+        for col in collections:
+            collection = self._db_provider.messages_db.get_collection(col["name"])
+            total_tokens = collection.aggregate([
+                {'$group': {'_id': None, 'total': {'$sum': '$tokens_from_prov'}}}
+            ]).next()['total']
+            count += total_tokens
+        return count
+
     # TOPICS
     def _create_new_topic(self, chat_id: int, topic_id: int):
         topic_info = self.__get_default_chat_topic(chat_id, topic_id)
@@ -90,8 +102,12 @@ class ChatManager:
         else:
             raise Exception(f"no user_info found: {user_id}")
 
-#     def update_user(self, user_info: UserInfo):
-#         self.__db_provider.update_user(user_info)
+    def get_users(self) -> list[UserInfo]:
+        users = self._db_provider.get_users()
+        return users
+
+    def update_user(self, user_info: UserInfo):
+        self._db_provider.update_user(user_info)
 
     # CHATS
     def get_user_chat_infos(self, user_id: int) -> list[ChatInfo]:
@@ -100,6 +116,18 @@ class ChatManager:
             return chat_infos
         else:
             raise Exception(f"no chat_info found: {user_id}")
+
+    async def get_user_chat_titles(self, user_id: int, bot: Bot) -> list[str]:
+        chat_infos = self._db_provider.get_user_chat_infos(user_id)
+        chats_names = []
+        for chat_info in chat_infos:
+            try:
+                chat = await bot.get_chat(chat_info["chat_id"])
+                chat_name = chat.title if chat.title else chat.username
+                chats_names.append(chat_name)
+            except:
+                chats_names.append(chat_info["chat_id"])
+        return chats_names
 
     def update_chat_info(self, chat_info: ChatInfo) -> None:
         self._db_provider.update_chat(chat_info)
@@ -127,7 +155,7 @@ class ChatManager:
     def format_system_prompt(prompt):
         if prompt is None or prompt == "None":
             return '<не задан>'
-        return f'"{prompt}"'
+        return f'\n```\n{prompt}\n```'
 
     def clear_system_prompt(self, chat_id: int, topic_id: int):
         self.set_system_prompt(None, chat_id, topic_id)

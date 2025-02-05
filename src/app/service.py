@@ -3,15 +3,14 @@ import re
 from datetime import datetime, UTC
 
 from anthropic.types import MessageParam, TextBlockParam
-from telegram import Update
-from telegram._bot import BT
+from telegram import Bot, Update
 from telegram.ext import ContextTypes
 
+from src.app.chat_manager import ChatManager
 from src.app.database import MongoManager
 from src.app.llm_provider import LLMProvider
 from src.app.message_repo import MessageRepository
 from src.config import settings
-from src.app.chat_manager import ChatManager
 from src.tools.custom_logging import get_logger
 
 logger = get_logger(__name__)
@@ -30,7 +29,6 @@ class MessageProcessingFacade:
 
     async def process_invite(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработка ссылки-приглашения"""
-        # service.process_invite_link(update.message.text)
         topic_invite_pattern = re.compile(r'https?://t.me/\w+/(\d+)/(\d+)')
         match = re.search(topic_invite_pattern, update.message.text)
         try:
@@ -46,7 +44,8 @@ class MessageProcessingFacade:
                 topic_id_send = topic_id
             try:
                 if topic_id in topics:
-                    msg = await context.bot.send_message(chat_id, "Ping. Проверка что бот может писать в этот топик.", message_thread_id=topic_id_send)
+                    msg = await context.bot.send_message(chat_id, "Ping. Проверка что бот может писать в этот топик.",
+                                                         message_thread_id=topic_id_send)
                     await update.message.reply_text(f"Бот и так добавлен в топик.")
                     await asyncio.sleep(30)
                     await msg.delete()
@@ -57,7 +56,8 @@ class MessageProcessingFacade:
                 await update.message.reply_text(f"Бот добавлен в этот топик.")
                 logger.info(f"Добавлен новый топик: {topic_id} ({update.effective_user.full_name})")
             except Exception as e:
-                await update.message.reply_text(f"Не удалось получить доступ к топику: {str(e)}, скорее всего боту не дали админку в группе.")
+                await update.message.reply_text(
+                    f"Не удалось получить доступ к топику: {str(e)}, скорее всего боту не дали админку в группе.")
                 logger.error(f"Ошибка при получении доступа к топику: {str(e)}")
         except Exception as e:
             await update.message.reply_text(f"Что-то пошло не так :(")
@@ -117,7 +117,7 @@ class MessageProcessingFacade:
         )
         return llm_resp_text
 
-    async def get_topic_info_message(self, chat_id: int, topic_id: int, user_id: int, bot: BT) -> str:
+    async def get_topic_info_message(self, chat_id: int, topic_id: int, user_id: int, bot: Bot) -> str:
         if topic_id is None:
             topic_id = 1
         topic_settings = self.chat_manager.get_topic_settings(chat_id, topic_id)
@@ -136,9 +136,9 @@ class MessageProcessingFacade:
         else:
             can_reply = "Да"
         message = (
-            f"Инфо: для чата {chat_name} ({topic_id})\n"
+            f"Инфо: для чата `{chat_name}` ({topic_id})\n"
             f"\n"
-            f"Модель: {model}\n"
+            f"Модель: `{model}`\n"
             f'Промпт: {prompt}\n'
             f"Температура (от 0 до 1): {temperature}\n"
             f"Контекст:\n"
@@ -148,22 +148,46 @@ class MessageProcessingFacade:
         )
         return message
 
-    async def get_user_info_message(self, user_id: int, bot: BT) -> str:
+    async def get_users(self, bot: Bot):
+        users = self.chat_manager.get_users()
+        message = ""
+        message += (
+            f"Инфо:\n\n"
+        )
+        templ = (
+            "Username: {username}\n"
+            "ID пользователя: {user_id}\n"
+            "Дата рег: {reg_date}\n"
+            "Токены: {tokens}\n"
+            "Токенов всего: {tokens_used}\n"
+            "Чаты: {chats}\n"
+        )
+        infos = [
+            templ.format(
+                username=user["username"],
+                user_id=user["user_id"],
+                reg_date=user["dt_created"],
+                tokens=user["tokens_balance"],
+                tokens_used=self.chat_manager.get_tokens_used(user["user_id"]),
+                chats=await self.chat_manager.get_user_chat_titles(user["user_id"], bot)
+            ) for user in users
+        ]
+        message += "\n".join(infos)
+        return message
+
+    async def get_user_info_message(self, user_id: int, bot: Bot) -> str:
         user_info = self.chat_manager.get_user_info(user_id)
-        chat_infos = self.chat_manager.get_user_chat_infos(user_id)
-        chats_ents = [await bot.get_chat(chat_info["chat_id"]) for chat_info in chat_infos]
-        chats_names = []
-        for chat in chats_ents:
-            chat_name = chat.title if chat.title else chat.username
-            chats_names.append(chat_name)
-        chats = ", ".join(chats_names)
+        chats_names = await self.chat_manager.get_user_chat_titles(user_id, bot)
+        chats = ", ".join(map(str, chats_names))
         tokens = user_info["tokens_balance"]
         username = user_info["username"]
+        reg_date = user_info["dt_created"]
         message = (
             f"Инфо:\n"
             f"\n"
             f"Username: {username}\n"
             f"ID пользователя: {user_id}\n"
+            f"Дата рег: {reg_date}\n"
             f"Токены: {tokens}\n"
             f"Чаты: {chats}\n"
         )

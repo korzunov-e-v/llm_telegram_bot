@@ -32,6 +32,8 @@ class UserInfo(TypedDict):
     username: str
     full_name: str
     tokens_balance: int
+    is_admin: NotRequired[bool]
+    dt_created: NotRequired[datetime.datetime]
 
 
 class MessageRecord(TypedDict):

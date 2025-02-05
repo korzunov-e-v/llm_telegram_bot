@@ -10,6 +10,7 @@ from telegram.error import BadRequest
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters, CallbackQueryHandler, ChatMemberHandler
 
 from src.app.service import message_processing_facade as service, chat_manager
+from src.config import settings
 from src.tools.custom_logging import get_logger
 from src.tools.filters import TopicFilter, InviteLinkFilter
 
@@ -171,13 +172,36 @@ async def topic_info_command(update: Update, _context: ContextTypes.DEFAULT_TYPE
         topic_id = None
     user_id = update.effective_user.id
     message = await service.get_topic_info_message(chat_id, topic_id, user_id, _context.bot)
-    await update.message.reply_text(message)
+    await update.message.reply_text(message, parse_mode="Markdown")
 
 
 async def user_info_command(update: Update, _context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     message = await service.get_user_info_message(user_id, _context.bot)
     await update.message.reply_text(message)
+
+
+async def user_infos_command(update: Update, _context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    user = service.chat_manager.get_user_info(user_id)
+    if user["is_admin"]:
+        message = await service.get_users(_context.bot)
+        await update.message.reply_text(message)
+
+
+async def i_am_admin_command(update: Update, _context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    try:
+        token = _context.args[0]
+        if token == settings.admin_token:
+            user = service.chat_manager.get_user_info(user_id)
+            user["is_admin"] = True
+            service.chat_manager.update_user(user)
+            await update.effective_message.reply_text("Token accepted.")
+        else:
+            await update.effective_message.reply_text("No.")
+    except:
+        await update.effective_message.reply_text("No.")
 
 
 async def prompt_change_command(update: Update, _context: ContextTypes.DEFAULT_TYPE):
@@ -316,6 +340,8 @@ def build_app(bot_token: str):
     app.add_handler(CommandHandler("cancel", cancel_command))
     app.add_handler(CommandHandler("empty", empty_command))
     app.add_handler(CommandHandler("stop", stop_command))
+    app.add_handler(CommandHandler("admin_users", user_infos_command))
+    app.add_handler(CommandHandler("i_am_admin", i_am_admin_command))
     app.add_handler(CallbackQueryHandler(button_change_model, pattern="change_model"))
     app.add_handler(CallbackQueryHandler(button_cancel, pattern="cancel"))
     app.add_handler(MessageHandler(filters=filters.TEXT & ~filters.COMMAND & invite_link_filter & filters.ChatType.PRIVATE, callback=invite_link_handler))

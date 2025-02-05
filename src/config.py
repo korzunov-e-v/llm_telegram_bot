@@ -13,6 +13,7 @@ class Settings:
     bot_token = os.getenv("BOT_TOKEN")
     anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
     mongo_url = os.getenv("MONGO_URL")
+    admin_token: list[int] = os.getenv("ADMIN_TOKEN", "secret-token")
 
 
 settings = Settings()

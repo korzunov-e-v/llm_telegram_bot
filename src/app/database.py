@@ -1,3 +1,5 @@
+import datetime
+
 from pymongo import MongoClient
 
 from src.models import MessageRecord, UserInfo, ChatInfo, TopicInfo
@@ -37,6 +39,8 @@ class MongoManager:
 
     # USERS
     def add_user(self, user_info: UserInfo) -> None:
+        user_info["dt_created"] = datetime.datetime.now(datetime.UTC)
+        user_info["is_admin"] = False
         self.logger.info(f"user created: {user_info}")
         self.user_info_collection.insert_one(user_info)
 
@@ -46,8 +50,14 @@ class MongoManager:
             return user_info_list[0]
         return None
 
-    # def update_user(self, user_info: UserInfo) -> None:
-    #     self.user_info_collection.replace_one({"_id": user_info["_id"]}, user_info)
+    def get_users(self) -> list[UserInfo] | None:
+        user_info_list = self.user_info_collection.find().to_list()
+        if user_info_list:
+            return user_info_list
+        return None
+
+    def update_user(self, user_info: UserInfo) -> None:
+        self.user_info_collection.replace_one({"_id": user_info["_id"]}, user_info)
 
     # CHATS
     def add_chat(self, chat_info: ChatInfo):
