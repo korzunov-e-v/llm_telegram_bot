@@ -117,7 +117,7 @@ class MessageProcessingFacade:
         )
         return llm_resp_text
 
-    async def get_topic_info_message(self, chat_id: int, topic_id: int, user_id: int, bot: Bot) -> str:
+    async def get_topic_info_message(self, chat_id: int, topic_id: int, user_id: int, bot: Bot, with_prompt: bool = True) -> str:
         if topic_id is None:
             topic_id = 1
         topic_settings = self.chat_manager.get_topic_settings(chat_id, topic_id)
@@ -125,7 +125,13 @@ class MessageProcessingFacade:
         chat_name = chat.title if chat.title else chat.username
         messages = self.chat_manager.get_context(chat_id, topic_id, topic_settings["offset"])
         model = topic_settings["model"]
-        prompt = self.chat_manager.format_system_prompt(topic_settings["system_prompt"])
+        if with_prompt:
+            prompt = self.chat_manager.format_system_prompt(topic_settings["system_prompt"])
+        else:
+            if topic_settings["system_prompt"]:
+                prompt = "<задан>"
+            else:
+                prompt = "<не задан>"
         temperature = topic_settings["temperature"]
         context_len = len(messages)
         context_tokens = self.llm_provider.count_tokens(topic_settings["model"], messages)

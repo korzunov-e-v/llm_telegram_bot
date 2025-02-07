@@ -95,7 +95,7 @@ async def clear_context_command(update: Update, _context: ContextTypes.DEFAULT_T
     else:
         topic_id = None
     user_id = update.effective_user.id
-    message = await service.get_topic_info_message(chat_id, topic_id, user_id, _context.bot)
+    message = await service.get_topic_info_message(chat_id, topic_id, user_id, _context.bot, with_prompt=False)
     message += "\nКонтекст очищен."
     service.chat_manager.clear_context(chat_id, topic_id)
     await update.message.reply_text(message)
