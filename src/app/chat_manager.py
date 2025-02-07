@@ -160,18 +160,19 @@ class ChatManager:
     def clear_system_prompt(self, chat_id: int, topic_id: int):
         self.set_system_prompt(None, chat_id, topic_id)
 
-#     # TEMPERATURE
-#     def set_temperature(self, user_id: int, temperature: float) -> None:
-#         if temperature and temperature > 1:
-#             temperature = 1
-#         elif temperature and temperature < 0:
-#             temperature = 0
-#         user_info = self.get_user(user_id)
-#         user_info["settings"]["temperature"] = temperature
-#         self.update_user(user_info)
-#
-#     def reset_temperature(self, user_id: int):
-#         self.set_temperature(user_id, settings.default_temperature)
+    # TEMPERATURE
+    def set_temperature(self, temperature: float, chat_id: int, topic_id: int) -> None:
+        temperature = float(temperature)
+        if temperature and temperature > 1:
+            temperature = 1
+        elif temperature and temperature < 0:
+            temperature = 0
+        topic_info = self.get_or_create_topic_info(chat_id, topic_id)
+        topic_info["settings"]["temperature"] = temperature
+        self.update_topic_info(topic_info)
+
+    def reset_temperature(self, chat_id: int, topic_id: int):
+        self.set_temperature(settings.default_temperature, chat_id, topic_id)
 
     # MODEL
     def change_model(self, chat_id: int, topic_id: int, model: ModelParam) -> None:

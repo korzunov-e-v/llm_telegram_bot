@@ -34,26 +34,30 @@ async def invite_link_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 
 async def delay_send(_context: ContextTypes.DEFAULT_TYPE):
-    await asyncio.sleep(2)
+    msg: Message = _context.job.data["msg"]
+    update = _context.job.data["update"]
     chat_id = _context.job.chat_id
     user_id = _context.job.user_id
     topic_id = _context.job.data["topic_id"]
     key = __get_queue_key(user_id, topic_id)
-    if not messages_queue[key]:
-        return None
-    update = _context.job.data["update"]
-    msg: Message = _context.job.data["msg"]
-    message = "\n".join(messages_queue[key])
-    del messages_queue[key]
-    llm_resp_text = service.process_message(message, user_id, chat_id, topic_id)
-    sections = MarkdownTextSplitter(chunk_overlap=0, keep_separator="end").split_text(llm_resp_text)
-    await msg.delete()
-    for i, section in enumerate(sections):
-        try:
-            await update.message.reply_text(section, parse_mode="Markdown")
-        except BadRequest:
-            logger.warning(f"can't send {i}/{len(sections)} message as md: {sections=}")
-            await update.message.reply_text(section)
+    try:
+        await asyncio.sleep(2)
+        if not messages_queue[key]:
+            return None
+        message = "\n".join(messages_queue[key])
+        del messages_queue[key]
+        llm_resp_text = service.process_message(message, user_id, chat_id, topic_id)
+        sections = MarkdownTextSplitter(chunk_overlap=0, keep_separator="end").split_text(llm_resp_text)
+        for i, section in enumerate(sections):
+            try:
+                await update.message.reply_text(section, parse_mode="Markdown")
+            except BadRequest:
+                logger.warning(f"can't send {i}/{len(sections)} message as md: {sections=}")
+                await update.message.reply_text(section)
+    except:
+        await update.message.reply_text("Произошла ошибка, попробуйте снова.", parse_mode="Markdown")
+    finally:
+        await msg.delete()
 
 
 async def hello_command(update: Update, _context: ContextTypes.DEFAULT_TYPE):
@@ -156,9 +160,13 @@ async def text_message_handler(update: Update, _context: ContextTypes.DEFAULT_TY
     queue_key = __get_queue_key(user_id, topic_id)
 
     if state.get(state_key) == "prompt":
-        chat_manager.set_system_prompt(msg_text, chat_id, topic_id)
+        service.chat_manager.set_system_prompt(msg_text, chat_id, topic_id)
         del state[state_key]
         return await msg.edit_text("Промпт установлен.")
+    if state.get(state_key) == "temperature":
+        service.chat_manager.set_temperature(msg_text, chat_id, topic_id)
+        del state[state_key]
+        return await msg.edit_text("Температура установлена.")
     else:
         messages_queue[queue_key].append(msg_text)
         _context.job_queue.run_once(delay_send, 0, user_id=user_id, chat_id=chat_id, data={"update": update, "msg": msg, "topic_id": topic_id})
@@ -215,7 +223,23 @@ async def prompt_change_command(update: Update, _context: ContextTypes.DEFAULT_T
     current_prompt = topic_settings["system_prompt"]
     await update.message.reply_text(
         'Отправьте новый промпт, /cancel для отмены или /empty для сброса промпта.\n'
-        f'Текущий промпт: {chat_manager.format_system_prompt(current_prompt)}'
+        f'Текущий промпт: {chat_manager.format_system_prompt(current_prompt)}',
+        parse_mode="Markdown",
+    )
+
+
+async def temperature_change_command(update: Update, _context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    if update.effective_message.is_topic_message:
+        topic_id = update.message.message_thread_id
+    else:
+        topic_id = None
+    state[__get_state_key(chat_id, topic_id)] = "temperature"
+    topic_settings = service.chat_manager.get_topic_settings(chat_id, topic_id)
+    await update.message.reply_text(
+        'Отправьте значение температуры (креативность/непредсказуемость модели), /cancel для отмены или /empty для сброса.\n'
+        f'Текущая температура: {topic_settings["temperature"]}\n'
+        f'Температура по-умолчанию: {settings.default_temperature}'
     )
 
 
@@ -241,6 +265,10 @@ async def empty_command(update: Update, _context: ContextTypes.DEFAULT_TYPE):
         del state[__get_state_key(chat_id, topic_id)]
         service.chat_manager.clear_system_prompt(chat_id, topic_id)
         return await update.message.reply_text("Промпт сброшен.")
+    if state.get(__get_state_key(chat_id, topic_id)) == "temperature":
+        del state[__get_state_key(chat_id, topic_id)]
+        service.chat_manager.reset_temperature(chat_id, topic_id)
+        return await update.message.reply_text("Настройка температуры сброшена.")
     await update.message.reply_text("Команды не ожидалось.")
 
 
@@ -337,6 +365,7 @@ def build_app(bot_token: str):
     app.add_handler(CommandHandler("info", topic_info_command))
     app.add_handler(CommandHandler("models", models_command))
     app.add_handler(CommandHandler("prompt", prompt_change_command))
+    app.add_handler(CommandHandler("temperature", temperature_change_command))
     app.add_handler(CommandHandler("cancel", cancel_command))
     app.add_handler(CommandHandler("empty", empty_command))
     app.add_handler(CommandHandler("stop", stop_command))
