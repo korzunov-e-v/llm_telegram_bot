@@ -12,6 +12,9 @@ build-prod:
 	TAG=$(shell git describe --contains HEAD | sed -E 's/(^v)//')
 	TAG=$(shell git describe --contains HEAD | sed -E 's/(^v)//') docker compose -f docker-compose.prod.yml build
 
+up-mongo-express-prod:
+	TAG=1.0.0 docker compose -f docker-compose.prod.yml up --force-recreate mongo-express
+
 build:
 	docker compose -f docker-compose.local.yml build
 
