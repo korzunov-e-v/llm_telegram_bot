@@ -58,18 +58,25 @@ async def delay_send(_context: ContextTypes.DEFAULT_TYPE) -> None:
             _context.job.data["msg"]: str - сообщение пользователя
             _context.job.data["update"]: telegram.Update - объект обновления от tg с сообщением пользователя
     """
+    user_id = _context.job.user_id
+    topic_id = _context.job.data["topic_id"]
+    key = get_queue_key(user_id, topic_id)
+    await asyncio.sleep(2)
+    if not messages_queue[key]:
+        return
+    message = "\n".join(messages_queue[key])
+    del messages_queue[key]
+    await send_msg_to_llm(_context, message)
+
+
+@log_decorator
+async def send_msg_to_llm(_context: ContextTypes.DEFAULT_TYPE, message: str):
     msg: Message = _context.job.data["msg"]
     update = _context.job.data["update"]
     chat_id = _context.job.chat_id
     user_id = _context.job.user_id
     topic_id = _context.job.data["topic_id"]
-    key = get_queue_key(user_id, topic_id)
     try:
-        await asyncio.sleep(2)
-        if not messages_queue[key]:
-            return None
-        message = "\n".join(messages_queue[key])
-        del messages_queue[key]
         llm_resp_text = service.process_message(message, user_id, chat_id, topic_id)
         sections = MarkdownTextSplitter(chunk_overlap=0, keep_separator="end").split_text(llm_resp_text)
         for i, section in enumerate(sections):

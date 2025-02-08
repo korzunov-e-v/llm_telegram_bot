@@ -17,7 +17,7 @@ from src.app.service import message_processing_facade as service, chat_manager
 from src.config import settings
 from src.filters import TopicFilter, InviteLinkFilter
 from src.tools.chat_state import get_state_key, state, ChatState
-from src.tools.log import get_logger
+from src.tools.log import get_logger, log_decorator
 from src.tools.message_queue import get_queue_key, messages_queue, delay_send
 from src.tools.update_getters import get_ids, extract_status_change
 
@@ -25,6 +25,7 @@ logger = get_logger(__name__)
 
 
 # COMMANDS
+@log_decorator
 async def start_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Команда запуска бота для чата/топика.
@@ -43,6 +44,7 @@ async def start_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text("Бот добавлен в чат.")
 
 
+@log_decorator
 async def stop_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Команда остановки бота для чата/топика.
@@ -62,6 +64,7 @@ async def stop_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> N
     )
 
 
+@log_decorator
 async def hello_command(update: Update, _context: ContextTypes.DEFAULT_TYPE):
     """
     Команда проверки связи для бота.
@@ -72,6 +75,7 @@ async def hello_command(update: Update, _context: ContextTypes.DEFAULT_TYPE):
 
 
 # TOPIC SETTINGS
+@log_decorator
 async def show_models_command(update: Update, _context: ContextTypes.DEFAULT_TYPE):
     """
     Команда смены модели для чата/топика.
@@ -85,6 +89,7 @@ async def show_models_command(update: Update, _context: ContextTypes.DEFAULT_TYP
     await update.message.reply_text("Выберите модель:", reply_markup=reply_markup)
 
 
+@log_decorator
 async def button_change_model(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Хэндлер нажатия inline кнопки смены модели.
@@ -100,6 +105,7 @@ async def button_change_model(update: Update, _context: ContextTypes.DEFAULT_TYP
     await query.edit_message_text(text=f"Выбрана модель: {model}")
 
 
+@log_decorator
 async def system_prompt_change_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Команда изменения системного промпта для чата/топика.
@@ -118,6 +124,7 @@ async def system_prompt_change_command(update: Update, _context: ContextTypes.DE
     )
 
 
+@log_decorator
 async def temperature_change_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Команда изменения настройки температуры для чата/топика.
@@ -135,6 +142,7 @@ async def temperature_change_command(update: Update, _context: ContextTypes.DEFA
     )
 
 
+@log_decorator
 async def clear_context_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Команда сброса контекста. После неё ллм "забывает" историю чата.
@@ -150,6 +158,7 @@ async def clear_context_command(update: Update, _context: ContextTypes.DEFAULT_T
 
 
 # COMMON
+@log_decorator
 async def cancel_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Команда отмены. Сбрасывает ChatState для чата/топика.
@@ -163,6 +172,7 @@ async def cancel_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) ->
     await update.message.reply_text("Команды не ожидалось.")
 
 
+@log_decorator
 async def empty_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Команда для сброса настройки. Ожидается ChatState для чата/топика.
@@ -182,6 +192,7 @@ async def empty_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> 
     await update.message.reply_text("Команды не ожидалось.")
 
 
+@log_decorator
 async def button_cancel(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
@@ -190,6 +201,7 @@ async def button_cancel(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 # INFO
+@log_decorator
 async def user_info_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Инфо о пользователе.
@@ -212,6 +224,7 @@ async def user_info_command(update: Update, _context: ContextTypes.DEFAULT_TYPE)
     await update.message.reply_text(message)
 
 
+@log_decorator
 async def topic_info_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Инфо о топике/чате для пользователя.
@@ -236,6 +249,7 @@ async def topic_info_command(update: Update, _context: ContextTypes.DEFAULT_TYPE
 
 
 # ADMIN
+@log_decorator
 async def i_am_admin_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Если пользователь прислал токен, то становится админом.
@@ -257,6 +271,7 @@ async def i_am_admin_command(update: Update, _context: ContextTypes.DEFAULT_TYPE
         await update.effective_message.reply_text("Error.")
 
 
+@log_decorator
 async def admin_users_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Инфо о всех пользователях. Для администраторов.
@@ -269,6 +284,7 @@ async def admin_users_command(update: Update, _context: ContextTypes.DEFAULT_TYP
 
 
 # TEXT
+@log_decorator
 async def text_message_handler(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Хэндлер для всех текстовых сообщений.
@@ -301,6 +317,7 @@ async def text_message_handler(update: Update, _context: ContextTypes.DEFAULT_TY
 
 
 # CHAT MEMBER HANDLER
+@log_decorator
 async def track_chats_handler(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Хэндлер для обновлений участников чата. Создаёт пользователей/чаты/топики в базе.
@@ -352,6 +369,7 @@ async def track_chats_handler(update: Update, _context: ContextTypes.DEFAULT_TYP
     #     _context.bot_data.setdefault("channel_ids", set()).discard(chat.id)
 
 
+@log_decorator
 async def ensure_user(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     При любом сообщении проверяет, есть ли пользователь в базе. Создаёт пользователя, чат и топик для ЛС.
@@ -361,6 +379,7 @@ async def ensure_user(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> No
     service.chat_manager.get_or_create_user(user_id, username, full_name)
 
 
+@log_decorator
 async def invite_link_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Хэндлер для сообщений с ссылками-приглашениями в чат.
@@ -369,6 +388,7 @@ async def invite_link_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     await service.process_invite(update, context)
 
 
+@log_decorator
 async def messages_not_allowed_handler(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         'Бот не добавлен в чат.\n'
