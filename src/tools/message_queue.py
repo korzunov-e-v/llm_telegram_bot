@@ -7,7 +7,9 @@ from telegram.error import BadRequest
 from telegram.ext import ContextTypes
 
 from src.app.service import message_processing_facade as service
-from src.bot import logger
+from src.tools.log import get_logger, log_decorator
+
+logger = get_logger(__name__)
 
 
 def get_queue_key(user_id: int, topic_id: int) -> str:

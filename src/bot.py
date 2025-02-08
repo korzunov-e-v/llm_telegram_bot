@@ -32,7 +32,7 @@ async def start_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> 
     Разрешает отправлять сообщения в этот чат/топик.
     По-умолчанию боту не разрешено отправлять сообщения в групповые чаты, даже если бот уже участник и админ.
     """
-    username, full_name, user_id, chat_id, topic_id, msg_text = get_ids(update)
+    username, full_name, user_id, chat_id, topic_id, msg_text = await get_ids(update)
 
     service.chat_manager.get_or_create_user(user_id, username, full_name)
     allowed_topics = service.chat_manager.get_allowed_topics(chat_id, user_id)
@@ -49,7 +49,7 @@ async def stop_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> N
 
     Запрещает боту отправлять сообщения в этот чат/топик.
     """
-    username, full_name, user_id, chat_id, topic_id, msg_text = get_ids(update)
+    username, full_name, user_id, chat_id, topic_id, msg_text = await get_ids(update)
 
     res = service.chat_manager.remove_allowed_topics(chat_id, topic_id, user_id)
     if not res:
@@ -91,7 +91,7 @@ async def button_change_model(update: Update, _context: ContextTypes.DEFAULT_TYP
 
     Изменяет модель для чата/топика.
     """
-    username, full_name, user_id, chat_id, topic_id, msg_text = get_ids(update)
+    username, full_name, user_id, chat_id, topic_id, msg_text = await get_ids(update)
 
     query = update.callback_query
     await query.answer()
@@ -106,7 +106,7 @@ async def system_prompt_change_command(update: Update, _context: ContextTypes.DE
 
     Устанавливает ChatState для чата/топика равным ChatState.PROMPT.
     """
-    username, full_name, user_id, chat_id, topic_id, msg_text = get_ids(update)
+    username, full_name, user_id, chat_id, topic_id, msg_text = await get_ids(update)
 
     state[get_state_key(chat_id, topic_id)] = ChatState.PROMPT
     topic_settings = service.chat_manager.get_topic_settings(chat_id, topic_id)
@@ -124,7 +124,7 @@ async def temperature_change_command(update: Update, _context: ContextTypes.DEFA
 
     Устанавливает ChatState для чата/топика равным ChatState.TEMPERATURE.
     """
-    username, full_name, user_id, chat_id, topic_id, msg_text = get_ids(update)
+    username, full_name, user_id, chat_id, topic_id, msg_text = await get_ids(update)
 
     state[get_state_key(chat_id, topic_id)] = ChatState.TEMPERATURE
     topic_settings = service.chat_manager.get_topic_settings(chat_id, topic_id)
@@ -141,7 +141,7 @@ async def clear_context_command(update: Update, _context: ContextTypes.DEFAULT_T
 
     Устанавливает offset для чата/топика равным количеству сообщений.
     """
-    username, full_name, user_id, chat_id, topic_id, msg_text = get_ids(update)
+    username, full_name, user_id, chat_id, topic_id, msg_text = await get_ids(update)
 
     message = await service.get_topic_info_message(chat_id, topic_id, user_id, _context.bot, with_prompt=False)
     message += "\nКонтекст очищен."
@@ -154,7 +154,7 @@ async def cancel_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) ->
     """
     Команда отмены. Сбрасывает ChatState для чата/топика.
     """
-    username, full_name, user_id, chat_id, topic_id, msg_text = get_ids(update)
+    username, full_name, user_id, chat_id, topic_id, msg_text = await get_ids(update)
 
     with suppress(KeyError):
         del state[get_state_key(chat_id, topic_id)]
@@ -167,7 +167,7 @@ async def empty_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> 
     """
     Команда для сброса настройки. Ожидается ChatState для чата/топика.
     """
-    username, full_name, user_id, chat_id, topic_id, msg_text = get_ids(update)
+    username, full_name, user_id, chat_id, topic_id, msg_text = await get_ids(update)
 
     if state.get(get_state_key(chat_id, topic_id)) == ChatState.PROMPT:
         del state[get_state_key(chat_id, topic_id)]
@@ -229,7 +229,7 @@ async def topic_info_command(update: Update, _context: ContextTypes.DEFAULT_TYPE
                 токенов: 593
             Бот может отвечать в этом чате: Да
     """
-    username, full_name, user_id, chat_id, topic_id, msg_text = get_ids(update)
+    username, full_name, user_id, chat_id, topic_id, msg_text = await get_ids(update)
 
     message = await service.get_topic_info_message(chat_id, topic_id, user_id, _context.bot)
     await update.message.reply_text(message, parse_mode="Markdown")
@@ -273,7 +273,7 @@ async def text_message_handler(update: Update, _context: ContextTypes.DEFAULT_TY
     """
     Хэндлер для всех текстовых сообщений.
     """
-    username, full_name, user_id, chat_id, topic_id, msg_text = get_ids(update)
+    username, full_name, user_id, chat_id, topic_id, msg_text = await get_ids(update)
     state_key = get_state_key(chat_id, topic_id)
     queue_key = get_queue_key(user_id, topic_id)
 
@@ -356,7 +356,7 @@ async def ensure_user(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> No
     """
     При любом сообщении проверяет, есть ли пользователь в базе. Создаёт пользователя, чат и топик для ЛС.
     """
-    username, full_name, user_id, chat_id, topic_id, msg_text = get_ids(update)
+    username, full_name, user_id, chat_id, topic_id, msg_text = await get_ids(update)
 
     service.chat_manager.get_or_create_user(user_id, username, full_name)
 
