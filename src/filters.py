@@ -8,6 +8,13 @@ from src.app.service import message_processing_facade as service
 
 
 class TopicFilter(MessageFilter):
+    """
+    Фильтр сообщений по топику.
+
+    Сообщение принимается, если:
+        * Если топик в списке разрешённых для чата
+        * Если сообщение не в групповом чате
+    """
     def filter(self, message: Message):
         if message.chat.is_forum and message.chat.type in (ChatType.SUPERGROUP, ChatType.GROUP):
             chat_id = message.chat_id
@@ -24,6 +31,13 @@ class TopicFilter(MessageFilter):
 
 
 class InviteLinkFilter(MessageFilter):
+    """
+    Фильтр сообщений со ссылкой-приглашением.
+
+    Сообщение принимается, если содержит только ссылку приглашение вида
+
+    `https://t.me/c/123/45`
+    """
     def filter(self, message: Message):
         topic_invite_pattern = re.compile(r'https?://t.me/\w+/(\d+)/(\d+)')
         match = re.match(topic_invite_pattern, message.text)

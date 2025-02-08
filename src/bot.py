@@ -25,7 +25,13 @@ logger = get_logger(__name__)
 
 
 # COMMANDS
-async def start_command(update: Update, _context: ContextTypes.DEFAULT_TYPE):
+async def start_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Команда запуска бота для чата/топика.
+
+    Разрешает отправлять сообщения в этот чат/топик.
+    По-умолчанию боту не разрешено отправлять сообщения в групповые чаты, даже если бот уже участник и админ.
+    """
     username, full_name, user_id, chat_id, topic_id, msg_text = get_ids(update)
 
     service.chat_manager.get_or_create_user(user_id, username, full_name)
@@ -37,12 +43,18 @@ async def start_command(update: Update, _context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Бот добавлен в чат.")
 
 
-async def stop_command(update: Update, _context: ContextTypes.DEFAULT_TYPE):
+async def stop_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Команда остановки бота для чата/топика.
+
+    Запрещает боту отправлять сообщения в этот чат/топик.
+    """
     username, full_name, user_id, chat_id, topic_id, msg_text = get_ids(update)
 
     res = service.chat_manager.remove_allowed_topics(chat_id, topic_id, user_id)
     if not res:
-        return await update.message.reply_text("Не ожидалось этой команды.")
+        await update.message.reply_text("Не ожидалось этой команды.")
+        return
 
     await update.message.reply_text(
         "Покинул топик. Чтобы добавить снова, отправьте ссылку-приглашение боту в лc.\n"
@@ -51,11 +63,21 @@ async def stop_command(update: Update, _context: ContextTypes.DEFAULT_TYPE):
 
 
 async def hello_command(update: Update, _context: ContextTypes.DEFAULT_TYPE):
+    """
+    Команда проверки связи для бота.
+
+    Проверяет что tg бот может принимать и отправлять сообщения.
+    """
     await update.message.reply_text(f'Hello {update.effective_chat.first_name}')
 
 
 # TOPIC SETTINGS
 async def show_models_command(update: Update, _context: ContextTypes.DEFAULT_TYPE):
+    """
+    Команда смены модели для чата/топика.
+
+    Отправляет inline клавиатуру с моделями.
+    """
     models = ModelParam.__dict__["__args__"][1].__dict__["__args__"]
     keyboard_models = [[InlineKeyboardButton(model, callback_data=f"change_model+{model}")] for model in models]
     keyboard = keyboard_models + [[InlineKeyboardButton("Отмена", callback_data="cancel+0")]]
@@ -63,7 +85,12 @@ async def show_models_command(update: Update, _context: ContextTypes.DEFAULT_TYP
     await update.message.reply_text("Выберите модель:", reply_markup=reply_markup)
 
 
-async def button_change_model(update: Update, _context: ContextTypes.DEFAULT_TYPE):
+async def button_change_model(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Хэндлер нажатия inline кнопки смены модели.
+
+    Изменяет модель для чата/топика.
+    """
     username, full_name, user_id, chat_id, topic_id, msg_text = get_ids(update)
 
     query = update.callback_query
@@ -73,7 +100,12 @@ async def button_change_model(update: Update, _context: ContextTypes.DEFAULT_TYP
     await query.edit_message_text(text=f"Выбрана модель: {model}")
 
 
-async def system_prompt_change_command(update: Update, _context: ContextTypes.DEFAULT_TYPE):
+async def system_prompt_change_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Команда изменения системного промпта для чата/топика.
+
+    Устанавливает ChatState для чата/топика равным ChatState.PROMPT.
+    """
     username, full_name, user_id, chat_id, topic_id, msg_text = get_ids(update)
 
     state[get_state_key(chat_id, topic_id)] = ChatState.PROMPT
@@ -86,7 +118,12 @@ async def system_prompt_change_command(update: Update, _context: ContextTypes.DE
     )
 
 
-async def temperature_change_command(update: Update, _context: ContextTypes.DEFAULT_TYPE):
+async def temperature_change_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Команда изменения настройки температуры для чата/топика.
+
+    Устанавливает ChatState для чата/топика равным ChatState.TEMPERATURE.
+    """
     username, full_name, user_id, chat_id, topic_id, msg_text = get_ids(update)
 
     state[get_state_key(chat_id, topic_id)] = ChatState.TEMPERATURE
@@ -98,7 +135,12 @@ async def temperature_change_command(update: Update, _context: ContextTypes.DEFA
     )
 
 
-async def clear_context_command(update: Update, _context: ContextTypes.DEFAULT_TYPE):
+async def clear_context_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Команда сброса контекста. После неё ллм "забывает" историю чата.
+
+    Устанавливает offset для чата/топика равным количеству сообщений.
+    """
     username, full_name, user_id, chat_id, topic_id, msg_text = get_ids(update)
 
     message = await service.get_topic_info_message(chat_id, topic_id, user_id, _context.bot, with_prompt=False)
@@ -108,30 +150,39 @@ async def clear_context_command(update: Update, _context: ContextTypes.DEFAULT_T
 
 
 # COMMON
-async def cancel_command(update: Update, _context: ContextTypes.DEFAULT_TYPE):
+async def cancel_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Команда отмены. Сбрасывает ChatState для чата/топика.
+    """
     username, full_name, user_id, chat_id, topic_id, msg_text = get_ids(update)
 
     with suppress(KeyError):
         del state[get_state_key(chat_id, topic_id)]
-        return await update.message.reply_text("Отменено.")
+        await update.message.reply_text("Отменено.")
+        return
     await update.message.reply_text("Команды не ожидалось.")
 
 
-async def empty_command(update: Update, _context: ContextTypes.DEFAULT_TYPE):
+async def empty_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Команда для сброса настройки. Ожидается ChatState для чата/топика.
+    """
     username, full_name, user_id, chat_id, topic_id, msg_text = get_ids(update)
 
     if state.get(get_state_key(chat_id, topic_id)) == ChatState.PROMPT:
         del state[get_state_key(chat_id, topic_id)]
         service.chat_manager.clear_system_prompt(chat_id, topic_id)
-        return await update.message.reply_text("Промпт сброшен.")
+        await update.message.reply_text("Промпт сброшен.")
+        return
     if state.get(get_state_key(chat_id, topic_id)) == ChatState.TEMPERATURE:
         del state[get_state_key(chat_id, topic_id)]
         service.chat_manager.reset_temperature(chat_id, topic_id)
-        return await update.message.reply_text("Настройка температуры сброшена.")
+        await update.message.reply_text("Настройка температуры сброшена.")
+        return
     await update.message.reply_text("Команды не ожидалось.")
 
 
-async def button_cancel(update: Update, _context: ContextTypes.DEFAULT_TYPE):
+async def button_cancel(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
     await query.edit_message_reply_markup(None)
@@ -139,13 +190,45 @@ async def button_cancel(update: Update, _context: ContextTypes.DEFAULT_TYPE):
 
 
 # INFO
-async def user_info_command(update: Update, _context: ContextTypes.DEFAULT_TYPE):
+async def user_info_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Инфо о пользователе.
+
+    Examples:
+
+        .. code-block::
+
+            Инфо:
+
+            Username: jkich1337
+            ID пользователя: 392350805
+            Дата рег: 2025-02-07 16:13:59.602000
+            Токены: 0
+            Чаты: jkich1337, Llm bots
+
+    """
     user_id = update.effective_user.id
     message = await service.get_user_info_message(user_id, _context.bot)
     await update.message.reply_text(message)
 
 
-async def topic_info_command(update: Update, _context: ContextTypes.DEFAULT_TYPE):
+async def topic_info_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Инфо о топике/чате для пользователя.
+
+    Examples:
+
+        .. code-block:: python
+            Инфо: для чата `Llm bots` (436)
+
+            Модель: `claude-3-5-sonnet-latest`
+            Промпт: <не задан>
+            Температура (от 0 до 1): 0.7
+            Контекст:
+                сообщений: 4
+                токенов: 593
+            Бот может отвечать в этом чате: Да
+    """
     username, full_name, user_id, chat_id, topic_id, msg_text = get_ids(update)
 
     message = await service.get_topic_info_message(chat_id, topic_id, user_id, _context.bot)
@@ -153,7 +236,12 @@ async def topic_info_command(update: Update, _context: ContextTypes.DEFAULT_TYPE
 
 
 # ADMIN
-async def i_am_admin_command(update: Update, _context: ContextTypes.DEFAULT_TYPE):
+async def i_am_admin_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Если пользователь прислал токен, то становится админом.
+
+    Токен задаётся в настройках `src.config.Settings.admin_token`.
+    """
     user_id = update.effective_user.id
     try:
         token = _context.args[0]
@@ -162,22 +250,29 @@ async def i_am_admin_command(update: Update, _context: ContextTypes.DEFAULT_TYPE
             user["is_admin"] = True
             service.chat_manager.update_user(user)
             await update.effective_message.reply_text("Token accepted.")
+            return
         else:
             await update.effective_message.reply_text("No.")
     except:
-        await update.effective_message.reply_text("No.")
+        await update.effective_message.reply_text("Error.")
 
 
-async def admin_users_command(update: Update, _context: ContextTypes.DEFAULT_TYPE):
+async def admin_users_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Инфо о всех пользователях. Для администраторов.
+    """
     user_id = update.effective_user.id
-    user = service.chat_manager.get_user_info(user_id)
-    if user["is_admin"]:
+    user_info = service.chat_manager.get_user_info(user_id)
+    if user_info["is_admin"]:
         message = await service.get_users(_context.bot)
         await update.message.reply_text(message)
 
 
 # TEXT
-async def text_message_handler(update: Update, _context: ContextTypes.DEFAULT_TYPE):
+async def text_message_handler(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Хэндлер для всех текстовых сообщений.
+    """
     username, full_name, user_id, chat_id, topic_id, msg_text = get_ids(update)
     state_key = get_state_key(chat_id, topic_id)
     queue_key = get_queue_key(user_id, topic_id)
@@ -187,11 +282,13 @@ async def text_message_handler(update: Update, _context: ContextTypes.DEFAULT_TY
     if state.get(state_key) == ChatState.PROMPT:
         service.chat_manager.set_system_prompt(msg_text, chat_id, topic_id)
         del state[state_key]
-        return await msg.edit_text("Промпт установлен.")
+        await msg.edit_text("Промпт установлен.")
+        return
     if state.get(state_key) == ChatState.TEMPERATURE:
         service.chat_manager.set_temperature(msg_text, chat_id, topic_id)
         del state[state_key]
-        return await msg.edit_text("Температура установлена.")
+        await msg.edit_text("Температура установлена.")
+        return
     else:
         messages_queue[queue_key].append(msg_text)
         _context.job_queue.run_once(

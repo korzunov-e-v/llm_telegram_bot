@@ -5,7 +5,7 @@ from telegram import Update, ChatMemberUpdated, ChatMember
 
 async def get_ids(update: Update) -> tuple[str, str, int, int, int | None, str | None]:
     """
-    Возвращает tuple с информацией о пользователе/чате.
+    Возвращает tuple с информацией о пользователе/чате/топике.
 
     :return: username, full_name, user_id, chat_id, topic_id, msg_text
     """

@@ -21,3 +21,4 @@ def get_state_key(chat_id: int, topic_id: int) -> str:
 
 
 state: dict[str, ChatState] = {}  # {f"{chat_id}+{topic_id}": "state"}
+"""Хранит состояния чатов."""

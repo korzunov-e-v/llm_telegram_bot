@@ -22,6 +22,7 @@ def get_queue_key(user_id: int, topic_id: int) -> str:
 
 
 messages_queue: dict[str, list[str]] = defaultdict(list)  # {f"{user_id}+{topic_id}": ["message_text", "continue_message_text"]}
+"""Очередь сообщений по пользователю и топику."""
 
 
 async def delay_send(_context: ContextTypes.DEFAULT_TYPE) -> None:
