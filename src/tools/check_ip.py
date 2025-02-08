@@ -1,6 +1,6 @@
 import requests
 
-from src.tools.custom_logging import get_logger
+from src.tools.log import get_logger
 
 # ip = requests.get('https://api.ipify.org').content.decode('utf8')
 

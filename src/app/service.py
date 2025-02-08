@@ -11,7 +11,7 @@ from src.app.database import MongoManager
 from src.app.llm_provider import LLMProvider
 from src.app.message_repo import MessageRepository
 from src.config import settings
-from src.tools.custom_logging import get_logger
+from src.tools.log import get_logger
 
 logger = get_logger(__name__)
 

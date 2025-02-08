@@ -3,7 +3,7 @@ import datetime
 from pymongo import MongoClient
 
 from src.models import MessageRecord, UserInfo, ChatInfo, TopicInfo
-from src.tools.custom_logging import get_logger
+from src.tools.log import get_logger
 
 
 class MongoManager:
