@@ -24,5 +24,6 @@ def load_from_large_pdf(file_path: Path) -> str | None:
 def clean_content(content: str) -> str:
     content = re.sub("\xad", "", content)  # Soft hyphen
     content = re.sub("\xa0", " ", content)  # No-break space
+    content = re.sub("\x0c", " ", content)
     content = re.sub("[−\\-–—]\n", "", content)
     return content

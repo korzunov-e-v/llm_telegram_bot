@@ -33,7 +33,7 @@ def get_logger(name: str):
     logger.addHandler(stream_handler)
 
     file_handler_e = logging.FileHandler(filename="error.log", encoding="utf-8")
-    file_handler_e.setLevel(logging.ERROR)
+    file_handler_e.setLevel(logging.WARNING)
     logger.addHandler(file_handler_e)
 
     return logger

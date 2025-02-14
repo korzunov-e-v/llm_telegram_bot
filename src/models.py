@@ -11,6 +11,7 @@ class Settings(TypedDict):
     system_prompt: Optional[str]
     temperature: float
     parse_pdf: Optional[bool]
+    md_v2_mode: Optional[bool]
 
 
 class TopicInfo(TypedDict):

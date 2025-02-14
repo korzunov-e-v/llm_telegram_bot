@@ -2,8 +2,10 @@ import asyncio
 import traceback
 from collections import defaultdict
 
+import telegramify_markdown
 from langchain_text_splitters import MarkdownTextSplitter
 from telegram import Message
+from telegram.constants import ParseMode
 from telegram.error import BadRequest
 from telegram.ext import ContextTypes
 
@@ -61,6 +63,7 @@ async def delay_send(_context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     user_id = _context.job.user_id
     topic_id = _context.job.data["topic_id"]
+    md_v2_mode = _context.job.data["md_v2_mode"]
     key = get_queue_key(user_id, topic_id)
     await asyncio.sleep(2)
     if not messages_queue[key]:
@@ -70,24 +73,26 @@ async def delay_send(_context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = _context.job.chat_id
     user_id = _context.job.user_id
     topic_id = _context.job.data["topic_id"]
-    llm_resp_text = service.process_message(message, user_id, chat_id, topic_id)
+    llm_resp_text = service.process_txt_message(message, user_id, chat_id, topic_id)
     update = _context.job.data["update"]
     msg: Message = _context.job.data["msg"]
-    await send_msg_as_md(update, msg, llm_resp_text)
+    await send_msg_as_md(update, msg, llm_resp_text, md_v2_mode)
 
 
 @log_decorator
-async def send_msg_as_md(update, msg, llm_resp_text: str):
+async def send_msg_as_md(update, msg, llm_resp_text: str, md_v2_mode: bool = True):
+    parse_mode = ParseMode.MARKDOWN_V2 if md_v2_mode else ParseMode.MARKDOWN
     try:
         sections = MarkdownTextSplitter(chunk_overlap=0, keep_separator="end").split_text(llm_resp_text)
         for i, section in enumerate(sections):
             try:
-                await update.message.reply_text(section, parse_mode="Markdown")
+                converted = telegramify_markdown.markdownify(section)
+                await update.message.reply_text(converted, parse_mode=parse_mode)
             except BadRequest:
                 logger.warning(f"can't send {i}/{len(sections)} message as md: {sections=}")
                 await update.message.reply_text(section)
     except Exception:
-        await update.message.reply_text("Произошла ошибка, попробуйте снова.", parse_mode="Markdown")
+        await update.message.reply_text("Произошла ошибка, попробуйте снова.", parse_mode=parse_mode)
         logger.error(traceback.format_exc())
     finally:
         await msg.delete()

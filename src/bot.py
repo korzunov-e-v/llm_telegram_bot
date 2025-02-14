@@ -292,6 +292,7 @@ async def text_message_handler(update: Update, _context: ContextTypes.DEFAULT_TY
     username, full_name, user_id, chat_id, topic_id, msg_text = await get_ids(update)
     state_key = get_state_key(chat_id, topic_id)
     queue_key = get_queue_key(user_id, topic_id)
+    topic_settings = service.chat_manager.get_topic_settings(chat_id, topic_id)
 
     msg = await update.message.reply_text("Пишет...")
 
@@ -312,7 +313,7 @@ async def text_message_handler(update: Update, _context: ContextTypes.DEFAULT_TY
             when=0,
             user_id=user_id,
             chat_id=chat_id,
-            data={"update": update, "msg": msg, "topic_id": topic_id}
+            data={"update": update, "msg": msg, "topic_id": topic_id, "md_v2_mode": topic_settings.get("md_v2_mode", False)}
         )
 
 
@@ -407,8 +408,9 @@ async def pdf_handler(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> No
     username, full_name, user_id, chat_id, topic_id, msg_text = await get_ids(update)
     msg = await update.message.reply_text("Пишет...")
 
+    topic_settings = service.chat_manager.get_topic_settings(chat_id, topic_id)
     llm_resp_text = await service.send_pdf_message(update, user_id, chat_id, topic_id)
-    await send_msg_as_md(update, msg, llm_resp_text)
+    await send_msg_as_md(update, msg, llm_resp_text, md_v2_mode=topic_settings.get("md_v2_mode", False))  # todo
 
 
 @log_decorator

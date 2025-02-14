@@ -6,7 +6,7 @@ from datetime import datetime, UTC
 from pathlib import Path
 
 from anthropic.types import MessageParam, TextBlockParam, Base64PDFSourceParam, DocumentBlockParam, CacheControlEphemeralParam, \
-    PlainTextSourceParam
+    PlainTextSourceParam, CitationsConfigParam, Message
 from telegram import Bot, Update
 from telegram.ext import ContextTypes
 
@@ -68,7 +68,7 @@ class MessageProcessingFacade:
             await update.message.reply_text(f"Что-то пошло не так :(")
             logger.error(f"Ошибка при обработке ссылки: {str(e)}")
 
-    async def send_pdf_message(self, update: Update, user_id: int, chat_id: int, topic_id: int):
+    async def send_pdf_message(self, update: Update, user_id: int, chat_id: int, topic_id: int) -> str:
         if topic_id is None:
             topic_id = 1
         topic_info = self.chat_manager.get_or_create_topic_info(chat_id, topic_id)
@@ -102,6 +102,7 @@ class MessageProcessingFacade:
                     source=source,
                     type="document",
                     cache_control=CacheControlEphemeralParam(type="ephemeral"),
+                    citations=CitationsConfigParam(enabled=True),
                 ),
             ],
             role="user"
@@ -109,10 +110,30 @@ class MessageProcessingFacade:
         user_message = MessageParam(content=[TextBlockParam(text=update.message.text or update.message.caption, type="text")], role="user")
 
         messages = context + [user_doc_message, user_message]
-        llm_resp_text = self.send_messages(messages, user_id, chat_id, topic_id)
+        llm_resp = self.send_messages(messages, user_id, chat_id, topic_id)
+        llm_resp_text = self.join_llm_response(llm_resp)
         return llm_resp_text
 
-    def send_messages(self, messages: list[MessageParam], user_id: int, chat_id: int, topic_id: int):
+    @staticmethod
+    def join_llm_response(message: Message) -> str:
+        content = message.content
+        result = ""
+        for part in content:
+            result += part.text.strip() + "\n"
+            if part.citations:
+                for cit in part.citations:
+                    lines = cit.cited_text.split("\n")
+                    text = "\n> ".join(lines)
+                    result += '> ' + text + "\n\n"
+            result = result.strip("> \n")
+            result = result.strip()
+            result += "\n\n"
+        result = result.strip()
+        result = re.sub("\n{2,}", "\n\n", result)
+        result = re.sub("(> ?\n)*", "", result)
+        return result
+
+    def send_messages(self, messages: list[MessageParam], user_id: int, chat_id: int, topic_id: int) -> Message:
         if topic_id is None:
             topic_id = 1
         topic_info = self.chat_manager.get_or_create_topic_info(chat_id, topic_id)
@@ -138,7 +159,6 @@ class MessageProcessingFacade:
         )
 
         a_dt = datetime.now(UTC)
-        llm_resp_text = response.content[0].text
         llm_message = MessageParam(
             content=[m.model_dump() for m in response.content],
             role=response.role,
@@ -167,9 +187,9 @@ class MessageProcessingFacade:
                 tokens_from_prov=response.usage.input_tokens,
                 timestamp=u_dt,
             )
-        return llm_resp_text
+        return response
 
-    def process_message(self, message_text: str, user_id: int, chat_id: int, topic_id: int):
+    def process_txt_message(self, message_text: str, user_id: int, chat_id: int, topic_id: int) -> str:
         if topic_id is None:
             topic_id = 1
         topic_info = self.chat_manager.get_or_create_topic_info(chat_id, topic_id)
@@ -181,7 +201,9 @@ class MessageProcessingFacade:
             role="user"
         )
         messages = context + [user_message]
-        llm_resp_text = self.send_messages(messages, user_id, chat_id, topic_id)
+
+        llm_resp = self.send_messages(messages, user_id, chat_id, topic_id)
+        llm_resp_text = self.join_llm_response(llm_resp)
         return llm_resp_text
 
     async def get_topic_info_message(self, chat_id: int, topic_id: int, user_id: int, bot: Bot, with_prompt: bool = True) -> str:
@@ -225,7 +247,7 @@ class MessageProcessingFacade:
         )
         return message
 
-    async def get_users(self, bot: Bot):
+    async def get_users(self, bot: Bot) -> str:
         users = self.chat_manager.get_users()
         message = ""
         message += (
