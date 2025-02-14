@@ -10,6 +10,7 @@ class Settings(TypedDict):
     model: str
     system_prompt: Optional[str]
     temperature: float
+    parse_pdf: Optional[bool]
 
 
 class TopicInfo(TypedDict):

@@ -1,9 +1,12 @@
 import asyncio
 import base64
+import os
 import re
 from datetime import datetime, UTC
+from pathlib import Path
 
-from anthropic.types import MessageParam, TextBlockParam, Base64PDFSourceParam, DocumentBlockParam, CacheControlEphemeralParam
+from anthropic.types import MessageParam, TextBlockParam, Base64PDFSourceParam, DocumentBlockParam, CacheControlEphemeralParam, \
+    PlainTextSourceParam
 from telegram import Bot, Update
 from telegram.ext import ContextTypes
 
@@ -13,6 +16,7 @@ from src.app.llm_provider import LLMProvider
 from src.app.message_repo import MessageRepository
 from src.config import settings
 from src.tools.log import get_logger
+from src.tools.pdf_tool import load_from_large_pdf
 
 logger = get_logger(__name__)
 
@@ -65,21 +69,37 @@ class MessageProcessingFacade:
             logger.error(f"Ошибка при обработке ссылки: {str(e)}")
 
     async def send_pdf_message(self, update: Update, user_id: int, chat_id: int, topic_id: int):
-        doc = await update.message.document.get_file(read_timeout=30, connect_timeout=30)
-        bo = bytearray()
-        await doc.download_as_bytearray(bo)
-        pdf_data = base64.standard_b64encode(bo).decode("utf-8")
-
         if topic_id is None:
             topic_id = 1
         topic_info = self.chat_manager.get_or_create_topic_info(chat_id, topic_id)
         topic_settings = topic_info["settings"]
+
+        filename = update.message.document.file_name
+        doc = await update.message.document.get_file(read_timeout=30, connect_timeout=30)
+        bo = bytearray()
+        await doc.download_as_bytearray(bo)
+        download_path = Path(f"tmp")
+        download_path.mkdir(exist_ok=True)
+        doc_path = download_path.joinpath(filename)
+        doc_path = await doc.download_to_drive(doc_path)
+        pdf_data = base64.standard_b64encode(bo).decode("utf-8")
+
         context = self.chat_manager.get_context(chat_id, topic_id, topic_settings["offset"])
+
+        if topic_settings.get("parse_pdf", True):
+            txt = load_from_large_pdf(doc_path)
+            logger.info(f"parsed {doc_path}. txt_len={len(txt)}")
+            if not txt:
+                return "Ошибка парсинга файла."
+            os.remove(doc_path)
+            source = PlainTextSourceParam(data=txt, media_type="text/plain", type="text")
+        else:
+            source = Base64PDFSourceParam(data=pdf_data, media_type="application/pdf", type="base64")
 
         user_doc_message = MessageParam(
             content=[
                 DocumentBlockParam(
-                    source=Base64PDFSourceParam(data=pdf_data, media_type="application/pdf", type="base64"),
+                    source=source,
                     type="document",
                     cache_control=CacheControlEphemeralParam(type="ephemeral"),
                 ),
