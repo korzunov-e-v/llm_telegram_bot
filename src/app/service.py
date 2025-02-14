@@ -1,8 +1,9 @@
 import asyncio
+import base64
 import re
 from datetime import datetime, UTC
 
-from anthropic.types import MessageParam, TextBlockParam
+from anthropic.types import MessageParam, TextBlockParam, Base64PDFSourceParam, DocumentBlockParam, CacheControlEphemeralParam
 from telegram import Bot, Update
 from telegram.ext import ContextTypes
 
@@ -63,19 +64,49 @@ class MessageProcessingFacade:
             await update.message.reply_text(f"Что-то пошло не так :(")
             logger.error(f"Ошибка при обработке ссылки: {str(e)}")
 
-    def process_message(self, message_text: str, user_id: int, chat_id: int, topic_id: int):
+    async def send_pdf_message(self, update: Update, user_id: int, chat_id: int, topic_id: int):
+        doc = await update.message.document.get_file(read_timeout=30, connect_timeout=30)
+        bo = bytearray()
+        await doc.download_as_bytearray(bo)
+        pdf_data = base64.standard_b64encode(bo).decode("utf-8")
+
         if topic_id is None:
             topic_id = 1
         topic_info = self.chat_manager.get_or_create_topic_info(chat_id, topic_id)
         topic_settings = topic_info["settings"]
         context = self.chat_manager.get_context(chat_id, topic_id, topic_settings["offset"])
 
-        user_message = MessageParam(
-            content=[TextBlockParam(text=message_text, type="text")],
+        user_doc_message = MessageParam(
+            content=[
+                DocumentBlockParam(
+                    source=Base64PDFSourceParam(data=pdf_data, media_type="application/pdf", type="base64"),
+                    type="document",
+                    cache_control=CacheControlEphemeralParam(type="ephemeral"),
+                ),
+            ],
             role="user"
         )
-        messages = context + [user_message]
-        input_sing_tokens_count = self.llm_provider.count_tokens(topic_settings["model"], [user_message])
+        user_message = MessageParam(content=[TextBlockParam(text=update.message.text or update.message.caption, type="text")], role="user")
+
+        messages = context + [user_doc_message, user_message]
+        llm_resp_text = self.send_messages(messages, user_id, chat_id, topic_id)
+        return llm_resp_text
+
+    def send_messages(self, messages: list[MessageParam], user_id: int, chat_id: int, topic_id: int):
+        if topic_id is None:
+            topic_id = 1
+        topic_info = self.chat_manager.get_or_create_topic_info(chat_id, topic_id)
+        topic_settings = topic_info["settings"]
+        context = self.chat_manager.get_context(chat_id, topic_id, topic_settings["offset"])
+
+        user_messages = []
+        for i in messages[::-1]:
+            if i["role"] == "user":
+                user_messages.append(i)
+            else:
+                break
+        user_messages = user_messages[::-1]
+        input_sing_tokens_count = self.llm_provider.count_tokens(topic_settings["model"], user_messages)
 
         u_dt = datetime.now(UTC)
         response = self.llm_provider.send_messages(
@@ -104,17 +135,33 @@ class MessageProcessingFacade:
             tokens_from_prov=response.usage.output_tokens,
             timestamp=a_dt,
         )
-        self.message_repo.add_message_to_db(  # user
-            chat_id=chat_id,
-            topic_id=topic_id,
-            user_id=user_id,
-            message=user_message,
-            context_n=len(context),
-            model=response.model,
-            tokens_message=input_sing_tokens_count,
-            tokens_from_prov=response.usage.input_tokens,
-            timestamp=u_dt,
+        for mes in user_messages:
+            self.message_repo.add_message_to_db(  # user
+                chat_id=chat_id,
+                topic_id=topic_id,
+                user_id=user_id,
+                message=mes,
+                context_n=len(context),
+                model=response.model,
+                tokens_message=input_sing_tokens_count,
+                tokens_from_prov=response.usage.input_tokens,
+                timestamp=u_dt,
+            )
+        return llm_resp_text
+
+    def process_message(self, message_text: str, user_id: int, chat_id: int, topic_id: int):
+        if topic_id is None:
+            topic_id = 1
+        topic_info = self.chat_manager.get_or_create_topic_info(chat_id, topic_id)
+        topic_settings = topic_info["settings"]
+        context = self.chat_manager.get_context(chat_id, topic_id, topic_settings["offset"])
+
+        user_message = MessageParam(
+            content=[TextBlockParam(text=message_text, type="text")],
+            role="user"
         )
+        messages = context + [user_message]
+        llm_resp_text = self.send_messages(messages, user_id, chat_id, topic_id)
         return llm_resp_text
 
     async def get_topic_info_message(self, chat_id: int, topic_id: int, user_id: int, bot: Bot, with_prompt: bool = True) -> str:
@@ -134,7 +181,11 @@ class MessageProcessingFacade:
                 prompt = "<не задан>"
         temperature = topic_settings["temperature"]
         context_len = len(messages)
-        context_tokens = self.llm_provider.count_tokens(topic_settings["model"], messages)
+        try:
+            context_tokens = self.llm_provider.count_tokens(topic_settings["model"], messages)
+        except Exception:
+            context_tokens = "<error>"
+            logger.error(f"context was broken. {user_id=} {chat_id=} {topic_id=} {topic_settings["offset"]=}")
         allowed_topics = self.chat_manager.get_allowed_topics(chat_id, user_id)
 
         if topic_id not in allowed_topics:

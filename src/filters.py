@@ -44,3 +44,19 @@ class InviteLinkFilter(MessageFilter):
         if match:
             return True
         return False
+
+
+class WebLinkFilter(MessageFilter):
+    """
+    Фильтр сообщений со ссылкой.
+
+    Сообщение принимается, если содержит только ссылку.
+
+    `https://...`
+    """
+    def filter(self, message: Message):
+        pattern = re.compile(r"((?P<protocol>https?)://(www\.)?)?(?P<host>[a-zA-Z0-9]{2,})\.(?P<domain>[a-zA-Z0-9]{2,})\.(?P<domain2>[a-zA-Z0-9]{2,})?")
+        match = re.match(pattern, message.text)
+        if match:
+            return True
+        return False

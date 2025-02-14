@@ -1,4 +1,5 @@
 import asyncio
+import traceback
 from collections import defaultdict
 
 from langchain_text_splitters import MarkdownTextSplitter
@@ -66,18 +67,18 @@ async def delay_send(_context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     message = "\n".join(messages_queue[key])
     del messages_queue[key]
-    await send_msg_to_llm(_context, message)
-
-
-@log_decorator
-async def send_msg_to_llm(_context: ContextTypes.DEFAULT_TYPE, message: str):
-    msg: Message = _context.job.data["msg"]
-    update = _context.job.data["update"]
     chat_id = _context.job.chat_id
     user_id = _context.job.user_id
     topic_id = _context.job.data["topic_id"]
+    llm_resp_text = service.process_message(message, user_id, chat_id, topic_id)
+    update = _context.job.data["update"]
+    msg: Message = _context.job.data["msg"]
+    await send_msg_as_md(update, msg, llm_resp_text)
+
+
+@log_decorator
+async def send_msg_as_md(update, msg, llm_resp_text: str):
     try:
-        llm_resp_text = service.process_message(message, user_id, chat_id, topic_id)
         sections = MarkdownTextSplitter(chunk_overlap=0, keep_separator="end").split_text(llm_resp_text)
         for i, section in enumerate(sections):
             try:
@@ -85,7 +86,8 @@ async def send_msg_to_llm(_context: ContextTypes.DEFAULT_TYPE, message: str):
             except BadRequest:
                 logger.warning(f"can't send {i}/{len(sections)} message as md: {sections=}")
                 await update.message.reply_text(section)
-    except:
+    except Exception:
         await update.message.reply_text("Произошла ошибка, попробуйте снова.", parse_mode="Markdown")
+        logger.error(traceback.format_exc())
     finally:
         await msg.delete()

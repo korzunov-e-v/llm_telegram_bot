@@ -15,10 +15,10 @@ from telegram.ext import (
 
 from src.app.service import message_processing_facade as service, chat_manager
 from src.config import settings
-from src.filters import TopicFilter, InviteLinkFilter
+from src.filters import TopicFilter, InviteLinkFilter, WebLinkFilter
 from src.tools.chat_state import get_state_key, state, ChatState
 from src.tools.log import get_logger, log_decorator
-from src.tools.message_queue import get_queue_key, messages_queue, delay_send
+from src.tools.message_queue import get_queue_key, messages_queue, delay_send, send_msg_as_md
 from src.tools.update_getters import get_ids, extract_status_change
 
 logger = get_logger(__name__)
@@ -389,6 +389,29 @@ async def invite_link_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 
 @log_decorator
+async def web_link_handler(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Хэндлер для сообщений с ссылками на сайты.
+    Получает контент с сайта и отправляет в ллм.
+    """
+    logger.info("Not supported yet.")
+    await update.message.reply_text("Not supported yet.")
+
+
+@log_decorator
+async def pdf_handler(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Хэндлер для сообщений с pdf файлами.
+    Получает контент и отправляет в ллм.
+    """
+    username, full_name, user_id, chat_id, topic_id, msg_text = await get_ids(update)
+    msg = await update.message.reply_text("Пишет...")
+
+    llm_resp_text = await service.send_pdf_message(update, user_id, chat_id, topic_id)
+    await send_msg_as_md(update, msg, llm_resp_text)
+
+
+@log_decorator
 async def messages_not_allowed_handler(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         'Бот не добавлен в чат.\n'
@@ -406,6 +429,7 @@ def build_app(bot_token: str) -> Application:
     """
     topic_filter = TopicFilter()
     invite_link_filter = InviteLinkFilter()
+    web_link_filter = WebLinkFilter()
 
     app = ApplicationBuilder().token(bot_token).build()
     app.add_handler(ChatMemberHandler(track_chats_handler, ChatMemberHandler.MY_CHAT_MEMBER))
@@ -428,5 +452,8 @@ def build_app(bot_token: str) -> Application:
     app.add_handler(CallbackQueryHandler(button_cancel, pattern="cancel"))
     app.add_handler(MessageHandler(filters=filters.TEXT & ~filters.COMMAND & invite_link_filter & filters.ChatType.PRIVATE,
                                    callback=invite_link_handler))
+    app.add_handler(MessageHandler(filters=filters.TEXT & ~filters.COMMAND & web_link_filter,
+                                   callback=web_link_handler))
+    app.add_handler(MessageHandler(filters=filters.Document.PDF, callback=pdf_handler))
     app.add_handler(MessageHandler(filters=filters.TEXT & ~filters.COMMAND & topic_filter, callback=text_message_handler))
     return app
