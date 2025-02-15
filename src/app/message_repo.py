@@ -22,6 +22,8 @@ class MessageRepository:
         tokens_from_prov: int,
         timestamp: datetime,
     ) -> None:
+        if topic_id is None:
+            topic_id = 1
         message = MessageRecord(
             message_param=message,
             context_n=context_n,

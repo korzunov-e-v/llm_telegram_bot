@@ -24,12 +24,16 @@ class ChatManager:
 #         self.update_user(user)
 
     def add_allowed_topic(self, chat_id: int, topic_id: int, user_id: int) -> None:
+        if topic_id is None:
+            topic_id = 1
         chat_info = self.get_or_create_chat_info(chat_id, user_id)
         chat_info["allowed_topics"][str(topic_id)] = True
         self.update_chat_info(chat_info)
 
     def remove_allowed_topics(self, chat_id: int, topic_id: int, user_id: int) -> bool:
         chat_info = self.get_or_create_chat_info(chat_id, user_id)
+        if topic_id is None:
+            topic_id = 1
         with suppress(KeyError):
             del chat_info["allowed_topics"][str(topic_id)]
             self.update_chat_info(chat_info)
@@ -38,11 +42,15 @@ class ChatManager:
 
     # CONTEXT
     def get_context(self, chat_id: int, topic_id: int, offset: int = 0) -> list[MessageParam]:
+        if topic_id is None:
+            topic_id = 1
         message_records: list[MessageRecord] = self._db_provider.get_chat_message_records(chat_id, topic_id, offset)
         messages = [mes["message_param"] for mes in message_records]
         return messages
 
     def clear_context(self, chat_id: int, topic_id: int) -> None:
+        if topic_id is None:
+            topic_id = 1
         count = self._db_provider.count_topic_messages(chat_id, topic_id)
         topic_info = self.get_or_create_topic_info(chat_id, topic_id)
         topic_info["settings"]["offset"] = count
@@ -61,11 +69,15 @@ class ChatManager:
 
     # TOPICS
     def _create_new_topic(self, chat_id: int, topic_id: int):
+        if topic_id is None:
+            topic_id = 1
         topic_info = self.__get_default_chat_topic(chat_id, topic_id)
         self._db_provider.add_topic(topic_info, chat_id)
         return topic_info
 
     def get_or_create_topic_info(self, chat_id: int, topic_id: int):
+        if topic_id is None:
+            topic_id = 1
         topic_info = self._db_provider.get_topic_info(chat_id, topic_id)
         if topic_info:
             return topic_info
@@ -74,6 +86,8 @@ class ChatManager:
             return topic_info
 
     def get_topic_settings(self, chat_id: int, topic_id: int) -> Settings:
+        if topic_id is None:
+            topic_id = 1
         topic_info = self.get_or_create_topic_info(chat_id, topic_id)
         return topic_info["settings"]
 
@@ -130,7 +144,7 @@ class ChatManager:
         return chats_names
 
     def update_chat_info(self, chat_info: ChatInfo) -> None:
-        self._db_provider.update_chat(chat_info)
+        self._db_provider.update_chat_info(chat_info)
 
     def get_or_create_chat_info(self, chat_id, user_id):
         chat_info = self._db_provider.get_chat_info(chat_id)
@@ -158,10 +172,14 @@ class ChatManager:
         return f'\n```\n{prompt}\n```'
 
     def clear_system_prompt(self, chat_id: int, topic_id: int):
+        if topic_id is None:
+            topic_id = 1
         self.set_system_prompt(None, chat_id, topic_id)
 
     # TEMPERATURE
     def set_temperature(self, temperature: float, chat_id: int, topic_id: int) -> None:
+        if topic_id is None:
+            topic_id = 1
         temperature = float(temperature)
         if temperature and temperature > 1:
             temperature = 1
@@ -172,10 +190,14 @@ class ChatManager:
         self.update_topic_info(topic_info)
 
     def reset_temperature(self, chat_id: int, topic_id: int):
+        if topic_id is None:
+            topic_id = 1
         self.set_temperature(settings.default_temperature, chat_id, topic_id)
 
     # MODEL
     def change_model(self, chat_id: int, topic_id: int, model: ModelParam) -> None:
+        if topic_id is None:
+            topic_id = 1
         topic_info = self.get_or_create_topic_info(chat_id, topic_id)
         topic_info["settings"]["model"] = model
         self.update_topic_info(topic_info)
@@ -201,9 +223,11 @@ class ChatManager:
         return doc
 
     def __get_default_chat_topic(self, chat_id: int, topic_id: int) -> TopicInfo:
+        if topic_id is None:
+            topic_id = 1
         doc = TopicInfo(
             chat_id=chat_id,
-            topic_id=topic_id or 1,
+            topic_id=topic_id,
             settings=self.__get_default_topic_settings(),
         )
         return doc

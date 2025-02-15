@@ -16,6 +16,8 @@ logger = get_logger(__name__)
 
 
 def get_queue_key(user_id: int, topic_id: int) -> str:
+    if topic_id is None:
+        topic_id = 1
     """
     Составной ключ для словаря очереди сообщений.
 
@@ -63,6 +65,8 @@ async def delay_send(_context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     user_id = _context.job.user_id
     topic_id = _context.job.data["topic_id"]
+    if topic_id is None:
+        topic_id = 1
     md_v2_mode = _context.job.data["md_v2_mode"]
     key = get_queue_key(user_id, topic_id)
     await asyncio.sleep(2)
