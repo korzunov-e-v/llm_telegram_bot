@@ -36,6 +36,7 @@ jobs:
           password: ${{ secrets.PASS }}
           script: |
             echo "cd" && cd ~/projects/llm_telegram_bot/ && pwd
+            echo "git restore ." && git restore .
             echo "git pull" && git pull
             echo "git checkout git checkout tags/${{ env.RELEASE_VERSION }}" && git checkout tags/${{ env.RELEASE_VERSION }}
             echo "sudo -S make build-prod" && echo ${{ secrets.PASS }} | sudo -S make build-prod

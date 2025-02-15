@@ -33,6 +33,7 @@ jobs:
           script: |
             cd ~/projects/llm_telegram_bot/
             git checkout master
+            echo "git restore ." && git restore .
             git pull
             echo ${{ secrets.PASS }} | sudo -S make build-dev
             echo ${{ secrets.PASS }} | sudo -S make up-dev
