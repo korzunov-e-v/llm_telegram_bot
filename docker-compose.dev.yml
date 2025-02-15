@@ -5,18 +5,15 @@ services:
     build:
       context: .
     image:
-      llm_telegram_bot-bot:${COMMIT_SHA}
+      llm_telegram_bot-bot:${COMMIT_SHA:-default}
     env_file:
       - .env.dev
-#    volumes:
-#      - ./src:/srv/src
-    restart: always
+    restart: unless-stopped
+
 
   mongo:
     image: mongo:4
-    restart: always
-#    ports:
-#      - "27017:27017"
+    restart: unless-stopped
     environment:
       MONGO_INITDB_ROOT_USERNAME: root
       MONGO_INITDB_ROOT_PASSWORD: example
@@ -25,7 +22,7 @@ services:
 
   mongo-express:
     image: mongo-express
-    restart: always
+    restart: unless-stopped
     ports:
       - "8081:8081"
     environment:
