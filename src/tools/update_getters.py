@@ -14,7 +14,7 @@ async def get_ids(update: Update) -> tuple[str, str, int, int, int | None, str |
     user_id = update.effective_user.id
     chat_id = update.effective_chat.id
     if update.effective_message.is_topic_message:
-        topic_id = update.message.message_thread_id
+        topic_id = update.effective_message.message_thread_id
     else:
         topic_id = None
     if update.message and update.message.text:
