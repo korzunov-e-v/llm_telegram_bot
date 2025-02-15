@@ -149,6 +149,16 @@ class MessageProcessingFacade:
         user_messages = user_messages[::-1]
         input_sing_tokens_count = [self.llm_provider.count_tokens(topic_settings["model"], [mes]) for mes in user_messages]
 
+        cache = False
+        for mes in context:
+            for m in mes["content"]:
+                if m.get("cache_control"):
+                    cache = True
+                    break
+
+        if cache:
+            messages[-1]["content"][0]["cache_control"] = {"type": "ephemeral"}
+
         u_dt = datetime.now(UTC)
         response = self.llm_provider.send_messages(
             model=topic_settings["model"],
@@ -245,8 +255,8 @@ class MessageProcessingFacade:
             context_tokens = "<error>"
             logger.error(f"context was broken. {user_id=} {chat_id=} {topic_id=} {topic_settings["offset"]=}")
         allowed_topics = self.chat_manager.get_allowed_topics(chat_id, user_id)
-        tokens_total_input = sum([mes["tokens_message"] for mes in messages_records if mes["message_param"]["role"] == "user"])
-        tokens_total_output = sum([mes["tokens_from_prov"] for mes in messages_records if mes["message_param"]["role"] == "assistant"])
+        tokens_total_input = sum([mes["tokens_message"] + mes["tokens_from_prov"] for mes in messages_records if mes["message_param"]["role"] == "user"])
+        tokens_total_output = sum([mes["tokens_message"] + mes["tokens_from_prov"] for mes in messages_records if mes["message_param"]["role"] == "assistant"])
         if topic_id not in allowed_topics:
             can_reply = "Нет"
         else:
