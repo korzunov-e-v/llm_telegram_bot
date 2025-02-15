@@ -14,6 +14,7 @@ class Settings:
     anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
     mongo_url = os.getenv("MONGO_URL")
     admin_token: list[int] = os.getenv("ADMIN_TOKEN", "secret-token")
+    debug: bool = os.getenv("DEBUG", False)
 
 
 settings = Settings()

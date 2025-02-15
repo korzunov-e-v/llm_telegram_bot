@@ -15,7 +15,8 @@ class LLMProvider:
         user_id: int,
         system_prompt: str = None,
         temp: float = settings.default_temperature,
-        max_tokens: int = settings.default_max_tokens
+        max_tokens: int = settings.default_max_tokens,
+        extra_headers: dict = None,
     ):
         response = self._client.messages.create(
             model=model,
@@ -24,6 +25,7 @@ class LLMProvider:
             metadata={"user_id": str(user_id)},
             system=[TextBlockParam(text=system_prompt, type="text")] if system_prompt else "",
             temperature=temp,
+            extra_headers=extra_headers,
         )
         return response
 

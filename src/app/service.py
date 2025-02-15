@@ -110,7 +110,7 @@ class MessageProcessingFacade:
         user_message = MessageParam(content=[TextBlockParam(text=update.message.text or update.message.caption, type="text")], role="user")
 
         messages = context + [user_doc_message, user_message]
-        llm_resp = self.send_messages(messages, user_id, chat_id, topic_id)
+        llm_resp = self.send_messages(messages, user_id, chat_id, topic_id, extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"})
         llm_resp_text = self.join_llm_response(llm_resp)
         return llm_resp_text
 
@@ -133,7 +133,7 @@ class MessageProcessingFacade:
         result = re.sub("(> ?\n)*", "", result)
         return result
 
-    def send_messages(self, messages: list[MessageParam], user_id: int, chat_id: int, topic_id: int) -> Message:
+    def send_messages(self, messages: list[MessageParam], user_id: int, chat_id: int, topic_id: int, extra_headers: dict = None) -> Message:
         if topic_id is None:
             topic_id = 1
         topic_info = self.chat_manager.get_or_create_topic_info(chat_id, topic_id)
@@ -147,7 +147,7 @@ class MessageProcessingFacade:
             else:
                 break
         user_messages = user_messages[::-1]
-        input_sing_tokens_count = self.llm_provider.count_tokens(topic_settings["model"], user_messages)
+        input_sing_tokens_count = [self.llm_provider.count_tokens(topic_settings["model"], [mes]) for mes in user_messages]
 
         u_dt = datetime.now(UTC)
         response = self.llm_provider.send_messages(
@@ -156,6 +156,7 @@ class MessageProcessingFacade:
             user_id=user_id,
             system_prompt=topic_settings["system_prompt"],
             temp=topic_settings["temperature"],
+            extra_headers=extra_headers,
         )
 
         a_dt = datetime.now(UTC)
@@ -175,7 +176,7 @@ class MessageProcessingFacade:
             tokens_from_prov=response.usage.output_tokens,
             timestamp=a_dt,
         )
-        for mes in user_messages:
+        for i, mes in enumerate(user_messages):
             self.message_repo.add_message_to_db(  # user
                 chat_id=chat_id,
                 topic_id=topic_id,
@@ -183,10 +184,24 @@ class MessageProcessingFacade:
                 message=mes,
                 context_n=len(context),
                 model=response.model,
-                tokens_message=input_sing_tokens_count,
+                tokens_message=input_sing_tokens_count[i],
                 tokens_from_prov=response.usage.input_tokens,
                 timestamp=u_dt,
             )
+
+        if settings.debug:
+            input_tokens = response.usage.input_tokens
+            output_tokens = response.usage.output_tokens
+            input_tokens_cache_read = getattr(response.usage, 'cache_read_input_tokens', '---')
+            input_tokens_cache_create = getattr(response.usage, 'cache_creation_input_tokens', '---')
+            print(f"User input tokens: {input_tokens}")
+            print(f"Output tokens: {output_tokens}")
+            print(f"Input tokens (cache read): {input_tokens_cache_read}")
+            print(f"Input tokens (cache write): {input_tokens_cache_create}")
+            total_input_tokens = input_tokens + (int(input_tokens_cache_read) if input_tokens_cache_read != '---' else 0)
+            percentage_cached = (int(input_tokens_cache_read) / total_input_tokens * 100 if input_tokens_cache_read != '---' and total_input_tokens > 0 else 0)
+            print(f"{percentage_cached:.1f}% of input prompt cached ({total_input_tokens} tokens)")
+
         return response
 
     def process_txt_message(self, message_text: str, user_id: int, chat_id: int, topic_id: int) -> str:
@@ -212,6 +227,7 @@ class MessageProcessingFacade:
         topic_settings = self.chat_manager.get_topic_settings(chat_id, topic_id)
         chat = await bot.get_chat(chat_id)
         chat_name = chat.title if chat.title else chat.username
+        messages_records = self.message_repo.get_messages_from_db(chat_id, topic_id, offset=topic_settings["offset"])
         messages = self.chat_manager.get_context(chat_id, topic_id, topic_settings["offset"])
         model = topic_settings["model"]
         if with_prompt:
@@ -229,7 +245,8 @@ class MessageProcessingFacade:
             context_tokens = "<error>"
             logger.error(f"context was broken. {user_id=} {chat_id=} {topic_id=} {topic_settings["offset"]=}")
         allowed_topics = self.chat_manager.get_allowed_topics(chat_id, user_id)
-
+        tokens_total_input = sum([mes["tokens_message"] for mes in messages_records if mes["message_param"]["role"] == "user"])
+        tokens_total_output = sum([mes["tokens_from_prov"] for mes in messages_records if mes["message_param"]["role"] == "assistant"])
         if topic_id not in allowed_topics:
             can_reply = "Нет"
         else:
@@ -243,6 +260,9 @@ class MessageProcessingFacade:
             f"Контекст:\n"
             f"    сообщений: {context_len}\n"
             f"    токенов: {context_tokens}\n"
+            f"Токенов использовано:\n"
+            f"    input:  {tokens_total_input}\n"
+            f"    output: {tokens_total_output}\n"
             f"Бот может отвечать в этом чате: {can_reply}\n"
         )
         return message
