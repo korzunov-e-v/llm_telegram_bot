@@ -84,19 +84,22 @@ async def delay_send(_context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 @log_decorator
-async def send_msg_as_md(update, msg, llm_resp_text: str, md_v2_mode: bool = True):
-    parse_mode = ParseMode.MARKDOWN_V2 if md_v2_mode else ParseMode.MARKDOWN
+async def send_msg_as_md(update, msg, llm_resp_text: str, md_v2_mode: bool = False):
     try:
         sections = MarkdownTextSplitter(chunk_overlap=0, keep_separator="end").split_text(llm_resp_text)
         for i, section in enumerate(sections):
             try:
-                converted = telegramify_markdown.markdownify(section)
-                await update.message.reply_text(converted, parse_mode=parse_mode)
+                if md_v2_mode:
+                    parse_mode = ParseMode.MARKDOWN_V2
+                    section = telegramify_markdown.markdownify(section)
+                else:
+                    parse_mode = ParseMode.MARKDOWN
+                await update.message.reply_text(section, parse_mode=parse_mode)
             except BadRequest:
                 logger.warning(f"can't send {i}/{len(sections)} message as md: {sections=}")
                 await update.message.reply_text(section)
     except Exception:
-        await update.message.reply_text("Произошла ошибка, попробуйте снова.", parse_mode=parse_mode)
+        await update.message.reply_text("Произошла ошибка, попробуйте снова.", parse_mode=ParseMode.MARKDOWN)
         logger.error(traceback.format_exc())
     finally:
         await msg.delete()

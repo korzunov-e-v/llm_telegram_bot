@@ -3,9 +3,9 @@ from contextlib import suppress
 from anthropic.types import MessageParam, ModelParam
 from telegram import Bot
 
+from src.app.database import MongoManager
 from src.config import settings
 from src.models import MessageRecord, UserInfo, ChatInfo, TopicInfo, Settings
-from src.app.database import MongoManager
 
 
 class ChatManager:
@@ -18,10 +18,10 @@ class ChatManager:
         topics_dict = chat_info["allowed_topics"]
         return [int(k) for k, v in topics_dict.items() if v]
 
-#     def set_allowed_topics(self, chat_id: int, topics: list[int]):
-#         user = self.get_user(chat_id)
-#         user["allowed_topics"] = {str(k): True for k, v in topics}
-#         self.update_user(user)
+    #     def set_allowed_topics(self, chat_id: int, topics: list[int]):
+    #         user = self.get_user(chat_id)
+    #         user["allowed_topics"] = {str(k): True for k, v in topics}
+    #         self.update_user(user)
 
     def add_allowed_topic(self, chat_id: int, topic_id: int, user_id: int) -> None:
         if topic_id is None:
@@ -57,14 +57,25 @@ class ChatManager:
         self.update_topic_info(topic_info)
 
     def get_tokens_used(self, user_id: int):
-        collections = self._db_provider.messages_db.list_collections(filter={'name': {'$regex': f'^{user_id}'}}).to_list()
+        chat_infos = self._db_provider.get_user_chat_infos(user_id)
+        col_names = set()
+        for chat_info in chat_infos:
+            topics_ids = list(chat_info["allowed_topics"].keys())
+            col_names.update(set(map(lambda x: f"{chat_info["chat_id"]}+{x}", topics_ids)))
+        col_names.add(f"{user_id}+1")
         count = 0
-        for col in collections:
-            collection = self._db_provider.messages_db.get_collection(col["name"])
+        for col in col_names:
+            collection = self._db_provider.messages_db.get_collection(col)
             total_tokens = collection.aggregate([
-                {'$group': {'_id': None, 'total': {'$sum': '$tokens_from_prov'}}}
-            ]).next()['total']
-            count += total_tokens
+                {
+                    '$group': {
+                        '_id': None,
+                        'total_from_prov': {'$sum': '$tokens_from_prov'},
+                        'total_message': {'$sum': '$tokens_message'},
+                    }
+                }
+            ]).next()
+            count += total_tokens["total_from_prov"] + total_tokens["total_message"]
         return count
 
     # TOPICS
@@ -139,7 +150,7 @@ class ChatManager:
                 chat = await bot.get_chat(chat_info["chat_id"])
                 chat_name = chat.title if chat.title else chat.username
                 chats_names.append(chat_name)
-            except:
+            except Exception:
                 chats_names.append(chat_info["chat_id"])
         return chats_names
 
@@ -239,5 +250,7 @@ class ChatManager:
             model=settings.default_model,
             system_prompt=None,
             temperature=settings.default_temperature,
+            md_v2_mode=True,
+            parse_pdf=False,
         )
         return doc
