@@ -66,7 +66,7 @@ class ChatManager:
         count = 0
         for col in col_names:
             collection = self._db_provider.messages_db.get_collection(col)
-            total_tokens = collection.aggregate([
+            col_results = collection.aggregate([
                 {
                     '$group': {
                         '_id': None,
@@ -74,8 +74,9 @@ class ChatManager:
                         'total_message': {'$sum': '$tokens_message'},
                     }
                 }
-            ]).next()
-            count += total_tokens["total_from_prov"] + total_tokens["total_message"]
+            ]).to_list()
+            for col_result in col_results:
+                count += col_result["total_from_prov"] + col_result["total_message"]
         return count
 
     # TOPICS
