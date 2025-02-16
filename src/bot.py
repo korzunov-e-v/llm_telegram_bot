@@ -69,9 +69,22 @@ async def hello_command(update: Update, _context: ContextTypes.DEFAULT_TYPE):
     """
     Команда проверки связи для бота.
 
-    Проверяет что tg бот может принимать и отправлять сообщения.
+    Проверяет что tg бот и ллм могут принимать и отправлять сообщения.
     """
-    await update.message.reply_text(f'Hello {update.effective_chat.first_name}')
+    username, full_name, user_id, chat_id, topic_id, msg_text = await get_ids(update)
+    msg = await update.message.reply_text(f'tg: Hello {username}\nllm: ...')
+    try:
+        response = service.llm_provider.send_messages(
+            model="claude-3-5-haiku-latest",
+            messages=[{"content": [{"type": "text", "text": "Привет"}], "role": "user"}],
+            user_id=user_id,
+            temp=1,
+            max_tokens=5,
+        )
+        llm_resp = response.content[0].text
+        await msg.edit_text(f'tg: Hello {username}\nllm: {llm_resp}')
+    except:
+        await msg.edit_text(f'tg: Hello {username}\nllm: <error>')
 
 
 # TOPIC SETTINGS
