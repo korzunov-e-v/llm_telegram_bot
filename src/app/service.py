@@ -12,7 +12,7 @@ from telegram.ext import ContextTypes
 
 from src.app.chat_manager import ChatManager
 from src.app.database import MongoManager
-from src.app.llm_provider import LLMProvider
+from src.app.llm_provider import AnthropicLlmProvider, LlmProvider
 from src.app.message_repo import MessageRepository
 from src.config import settings
 from src.tools.log import get_logger
@@ -24,11 +24,11 @@ logger = get_logger(__name__)
 class MessageProcessingFacade:
     def __init__(
         self,
-        llm_provider: LLMProvider,
+        llm_provider: LlmProvider,
         chat_manager: ChatManager,
         message_repo: MessageRepository,
     ):
-        self.llm_provider: LLMProvider = llm_provider
+        self.llm_provider: LlmProvider = llm_provider
         self.chat_manager: ChatManager = chat_manager
         self.message_repo: MessageRepository = message_repo
 
@@ -110,7 +110,7 @@ class MessageProcessingFacade:
         user_message = MessageParam(content=[TextBlockParam(text=update.message.text or update.message.caption, type="text")], role="user")
 
         messages = context + [user_doc_message, user_message]
-        llm_resp = self.send_messages(messages, user_id, chat_id, topic_id, extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"})
+        llm_resp = self.send_messages(messages, user_id, chat_id, topic_id, cache=True)
         llm_resp_text = self.join_llm_response(llm_resp)
         return llm_resp_text
 
@@ -133,7 +133,7 @@ class MessageProcessingFacade:
         result = re.sub("(> ?\n)*", "", result)
         return result
 
-    def send_messages(self, messages: list[MessageParam], user_id: int, chat_id: int, topic_id: int, extra_headers: dict = None) -> Message:
+    def send_messages(self, messages: list[MessageParam], user_id: int, chat_id: int, topic_id: int, cache: bool = None) -> Message:
         if topic_id is None:
             topic_id = 1
         topic_info = self.chat_manager.get_or_create_topic_info(chat_id, topic_id)
@@ -149,14 +149,14 @@ class MessageProcessingFacade:
         user_messages = user_messages[::-1]
         input_sing_tokens_count = [self.llm_provider.count_tokens(topic_settings["model"], [mes]) for mes in user_messages]
 
-        cache = False
+        cache_used_in_context = False
         for mes in context:
             for m in mes["content"]:
                 if m.get("cache_control"):
-                    cache = True
+                    cache_used_in_context = True
                     break
 
-        if cache:
+        if cache_used_in_context:
             messages[-1]["content"][0]["cache_control"] = {"type": "ephemeral"}
 
         u_dt = datetime.now(UTC)
@@ -166,7 +166,7 @@ class MessageProcessingFacade:
             user_id=user_id,
             system_prompt=topic_settings["system_prompt"],
             temp=topic_settings["temperature"],
-            extra_headers=extra_headers,
+            cache=cache,
         )
 
         a_dt = datetime.now(UTC)
@@ -333,7 +333,7 @@ class MessageProcessingFacade:
 db_provider = MongoManager(settings.mongo_url)
 chat_manager = ChatManager(db_provider)
 message_repo = MessageRepository(db_provider)
-llm_provider = LLMProvider(settings.anthropic_api_key)
+llm_provider = AnthropicLlmProvider(api_key=settings.anthropic_api_key)
 message_processing_facade = MessageProcessingFacade(
     llm_provider=llm_provider,
     message_repo=message_repo,
