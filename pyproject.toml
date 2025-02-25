@@ -12,7 +12,7 @@ package-mode = false
 python = "^3.12"
 python-dotenv = "^1.0.1"
 python-telegram-bot = {extras = ["job-queue"], version = "^21.10"}
-anthropic = "^0.45.1"
+anthropic = "0.47.1"
 pymongo = {extras = ["srv"], version = "^4.10.1"}
 requests = "^2.32.3"
 langchain-text-splitters = "^0.3.5"

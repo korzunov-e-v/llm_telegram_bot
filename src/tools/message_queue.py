@@ -77,7 +77,7 @@ async def delay_send(_context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = _context.job.chat_id
     user_id = _context.job.user_id
     topic_id = _context.job.data["topic_id"]
-    llm_resp_text = service.process_txt_message(message, user_id, chat_id, topic_id)
+    llm_resp_text = await service.process_txt_message(message, user_id, chat_id, topic_id)
     update = _context.job.data["update"]
     msg: Message = _context.job.data["msg"]
     await send_msg_as_md(update, msg, llm_resp_text, md_v2_mode)

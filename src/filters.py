@@ -1,3 +1,4 @@
+import asyncio
 import re
 
 from telegram import Message
@@ -24,7 +25,7 @@ class TopicFilter(MessageFilter):
             if thread_id is None:
                 thread_id = 1
             user_id = message.from_user.id
-            allowed = service.chat_manager.get_allowed_topics(chat_id, user_id)
+            allowed = service.chat_manager.sync_get_allowed_topics(chat_id, user_id)
             if not (thread_id in allowed):
                 return False
         return True

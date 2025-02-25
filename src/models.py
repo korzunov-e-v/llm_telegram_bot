@@ -1,8 +1,10 @@
 import datetime
-from typing import TypedDict, NotRequired, Optional
+from typing import TypedDict, NotRequired, Optional, Literal
 
-from anthropic.types import MessageParam, ModelParam
+from anthropic.types import ModelParam
 from bson import ObjectId
+from pydantic_ai.messages import ModelResponse
+from pydantic_ai.usage import Usage
 
 
 class Settings(TypedDict):
@@ -38,12 +40,27 @@ class UserInfo(TypedDict):
     dt_created: NotRequired[datetime.datetime]
 
 
+class MessageModel(TypedDict):
+    content: str
+    role: Literal["assistant", "user"]
+
+
 class MessageRecord(TypedDict):
     _id: NotRequired[ObjectId]
-    message_param: MessageParam
+    message_param: MessageModel
     context_n: int
     model: ModelParam
     tokens_message: int
     tokens_from_prov: int
     user_id: int
     timestamp: datetime.datetime
+
+
+class LlmProviderSendResponse(TypedDict):
+    model_response: ModelResponse
+    usage: Usage
+
+
+class AvailableModel(TypedDict):
+    display_name: str
+    name: str

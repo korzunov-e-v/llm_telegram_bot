@@ -1,6 +1,7 @@
+import traceback
 from contextlib import suppress
 
-from anthropic.types import ModelParam
+from anthropic.types import ModelParam, MessageParam, TextBlockParam
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Chat
 from telegram.ext import (
     ApplicationBuilder,
@@ -13,9 +14,10 @@ from telegram.ext import (
     Application,
 )
 
-from src.app.service import message_processing_facade as service, chat_manager
+from src.app.service import message_processing_facade as service
 from src.config import settings
 from src.filters import TopicFilter, InviteLinkFilter, WebLinkFilter
+from src.models import MessageModel
 from src.tools.chat_state import get_state_key, state, ChatState
 from src.tools.log import get_logger, log_decorator
 from src.tools.message_queue import get_queue_key, messages_queue, delay_send, send_msg_as_md
@@ -35,12 +37,12 @@ async def start_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> 
     """
     username, full_name, user_id, chat_id, topic_id, msg_text = await get_ids(update)
 
-    service.chat_manager.get_or_create_user(user_id, username, full_name)
-    allowed_topics = service.chat_manager.get_allowed_topics(chat_id, user_id)
+    await service.chat_manager.get_or_create_user(user_id, username, full_name)
+    allowed_topics = await service.chat_manager.get_allowed_topics(chat_id, user_id)
     if topic_id in allowed_topics:
         await update.message.reply_text("Бот уже тут.")
     else:
-        service.chat_manager.add_allowed_topic(chat_id, topic_id, user_id)
+        await service.chat_manager.add_allowed_topic(chat_id, topic_id, user_id)
         await update.message.reply_text("Бот добавлен в чат.")
 
 
@@ -53,7 +55,7 @@ async def stop_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> N
     """
     username, full_name, user_id, chat_id, topic_id, msg_text = await get_ids(update)
 
-    res = service.chat_manager.remove_allowed_topics(chat_id, topic_id, user_id)
+    res = await service.chat_manager.remove_allowed_topics(chat_id, topic_id, user_id)
     if not res:
         await update.message.reply_text("Не ожидалось этой команды.")
         return
@@ -74,16 +76,18 @@ async def hello_command(update: Update, _context: ContextTypes.DEFAULT_TYPE):
     username, full_name, user_id, chat_id, topic_id, msg_text = await get_ids(update)
     msg = await update.message.reply_text(f'tg: Hello {username}\nllm: ...')
     try:
-        response = service.llm_provider.send_messages(
+        response = await service.llm_provider.send_messages(
             model="claude-3-5-haiku-latest",
-            messages=[{"content": [{"type": "text", "text": "Привет"}], "role": "user"}],
+            messages=[MessageModel(content="На связи?", role="user")],
             user_id=user_id,
             temp=1,
-            max_tokens=5,
+            max_tokens=10,
         )
-        llm_resp = response.content[0].text
+        llm_resp = response["model_response"].parts[0].content
         await msg.edit_text(f'tg: Hello {username}\nllm: {llm_resp}')
-    except:
+    except Exception as e:
+        logger.error("hello command error: ", exc_info=e)
+        logger.error(traceback.format_exc())
         await msg.edit_text(f'tg: Hello {username}\nllm: <error>')
 
 
@@ -95,8 +99,8 @@ async def show_models_command(update: Update, _context: ContextTypes.DEFAULT_TYP
 
     Отправляет inline клавиатуру с моделями.
     """
-    models = ModelParam.__dict__["__args__"][1].__dict__["__args__"]
-    keyboard_models = [[InlineKeyboardButton(model, callback_data=f"change_model+{model}")] for model in models]
+    models = await service.llm_provider.get_models()
+    keyboard_models = [[InlineKeyboardButton(f"{model["display_name"]} | {model["name"]}", callback_data=f"change_model+{model["name"]}")] for model in models]
     keyboard = keyboard_models + [[InlineKeyboardButton("Отмена", callback_data="cancel+0")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text("Выберите модель:", reply_markup=reply_markup)
@@ -114,7 +118,7 @@ async def button_change_model(update: Update, _context: ContextTypes.DEFAULT_TYP
     query = update.callback_query
     await query.answer()
     model = query.data.split("+")[1]
-    service.chat_manager.change_model(chat_id, topic_id, model)
+    await service.chat_manager.change_model(chat_id, topic_id, model)
     await query.edit_message_text(text=f"Выбрана модель: {model}")
 
 
@@ -128,11 +132,11 @@ async def system_prompt_change_command(update: Update, _context: ContextTypes.DE
     username, full_name, user_id, chat_id, topic_id, msg_text = await get_ids(update)
 
     state[get_state_key(chat_id, topic_id)] = ChatState.PROMPT
-    topic_settings = service.chat_manager.get_topic_settings(chat_id, topic_id)
+    topic_settings = await service.chat_manager.get_topic_settings(chat_id, topic_id)
     current_prompt = topic_settings["system_prompt"]
     await update.message.reply_text(
         'Отправьте новый промпт, /cancel для отмены или /empty для сброса промпта.\n'
-        f'Текущий промпт: {chat_manager.format_system_prompt(current_prompt)}',
+        f'Текущий промпт: {service.chat_manager.format_system_prompt(current_prompt)}',
         parse_mode="Markdown",
     )
 
@@ -147,7 +151,7 @@ async def temperature_change_command(update: Update, _context: ContextTypes.DEFA
     username, full_name, user_id, chat_id, topic_id, msg_text = await get_ids(update)
 
     state[get_state_key(chat_id, topic_id)] = ChatState.TEMPERATURE
-    topic_settings = service.chat_manager.get_topic_settings(chat_id, topic_id)
+    topic_settings = await service.chat_manager.get_topic_settings(chat_id, topic_id)
     await update.message.reply_text(
         'Отправьте значение температуры (креативность/непредсказуемость модели), /cancel для отмены или /empty для сброса.\n'
         f'Текущая температура: {topic_settings["temperature"]}\n'
@@ -166,7 +170,7 @@ async def clear_context_command(update: Update, _context: ContextTypes.DEFAULT_T
 
     message = await service.get_topic_info_message(chat_id, topic_id, user_id, _context.bot, with_prompt=False)
     message += "\nКонтекст очищен."
-    service.chat_manager.clear_context(chat_id, topic_id)
+    await service.chat_manager.clear_context(chat_id, topic_id)
     await update.message.reply_text(message)
 
 
@@ -194,12 +198,12 @@ async def empty_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> 
 
     if state.get(get_state_key(chat_id, topic_id)) == ChatState.PROMPT:
         del state[get_state_key(chat_id, topic_id)]
-        service.chat_manager.clear_system_prompt(chat_id, topic_id)
+        await service.chat_manager.clear_system_prompt(chat_id, topic_id)
         await update.message.reply_text("Промпт сброшен.")
         return
     if state.get(get_state_key(chat_id, topic_id)) == ChatState.TEMPERATURE:
         del state[get_state_key(chat_id, topic_id)]
-        service.chat_manager.reset_temperature(chat_id, topic_id)
+        await service.chat_manager.reset_temperature(chat_id, topic_id)
         await update.message.reply_text("Настройка температуры сброшена.")
         return
     await update.message.reply_text("Команды не ожидалось.")
@@ -273,14 +277,14 @@ async def i_am_admin_command(update: Update, _context: ContextTypes.DEFAULT_TYPE
     try:
         token = _context.args[0]
         if token == settings.admin_token:
-            user = service.chat_manager.get_user_info(user_id)
+            user = await service.chat_manager.get_user_info(user_id)
             user["is_admin"] = True
-            service.chat_manager.update_user(user)
+            await service.chat_manager.update_user(user)
             await update.effective_message.reply_text("Token accepted.")
             return
         else:
             await update.effective_message.reply_text("No.")
-    except:
+    except Exception:
         await update.effective_message.reply_text("Error.")
 
 
@@ -290,7 +294,7 @@ async def admin_users_command(update: Update, _context: ContextTypes.DEFAULT_TYP
     Инфо о всех пользователях. Для администраторов.
     """
     user_id = update.effective_user.id
-    user_info = service.chat_manager.get_user_info(user_id)
+    user_info = await service.chat_manager.get_user_info(user_id)
     if user_info["is_admin"]:
         message = await service.get_users(_context.bot)
         await update.message.reply_text(message)
@@ -305,17 +309,17 @@ async def text_message_handler(update: Update, _context: ContextTypes.DEFAULT_TY
     username, full_name, user_id, chat_id, topic_id, msg_text = await get_ids(update)
     state_key = get_state_key(chat_id, topic_id)
     queue_key = get_queue_key(user_id, topic_id)
-    topic_settings = service.chat_manager.get_topic_settings(chat_id, topic_id)
+    topic_settings = await service.chat_manager.get_topic_settings(chat_id, topic_id)
 
     msg = await update.message.reply_text("Пишет...")
 
     if state.get(state_key) == ChatState.PROMPT:
-        service.chat_manager.set_system_prompt(msg_text, chat_id, topic_id)
+        await service.chat_manager.set_system_prompt(msg_text, chat_id, topic_id)
         del state[state_key]
         await msg.edit_text("Промпт установлен.")
         return
     if state.get(state_key) == ChatState.TEMPERATURE:
-        service.chat_manager.set_temperature(msg_text, chat_id, topic_id)
+        await service.chat_manager.set_temperature(msg_text, chat_id, topic_id)
         del state[state_key]
         await msg.edit_text("Температура установлена.")
         return
@@ -341,17 +345,7 @@ async def track_chats_handler(update: Update, _context: ContextTypes.DEFAULT_TYP
         return
     was_member, is_member = result
 
-    # check who is responsible for the change
-    full_name = update.effective_user.full_name
-    username = update.effective_user.username
-
-    chat_id = update.effective_chat.id
-    message = update.message
-    if message:
-        topic_id = message.message_thread_id
-    else:
-        topic_id = None
-    user_id = update.effective_user.id
+    username, full_name, user_id, chat_id, topic_id, msg_text = await get_ids(update)
 
     # Handle chat types differently:
     chat = update.effective_chat
@@ -363,7 +357,7 @@ async def track_chats_handler(update: Update, _context: ContextTypes.DEFAULT_TYP
             # We're including this here for the sake of the example.
             logger.info("%s unblocked the bot", full_name)
             # _context.bot_data.setdefault("user_ids", set()).add(chat.id)
-            service.new_private_chat(user_id, username, full_name)
+            await service.new_private_chat(user_id, username, full_name)
         elif was_member and not is_member:
             logger.info("%s blocked the bot", full_name)
             # _context.bot_data.setdefault("user_ids", set()).discard(chat.id)
@@ -371,7 +365,7 @@ async def track_chats_handler(update: Update, _context: ContextTypes.DEFAULT_TYP
         if not was_member and is_member:
             logger.info("%s added the bot to the group %s", full_name, chat.title)
             # _context.bot_data.setdefault("group_ids", set()).add(chat.id)
-            service.new_group(user_id, full_name, chat_id, topic_id)
+            await service.new_group(user_id, username, full_name, chat_id)
         elif was_member and not is_member:
             logger.info("%s removed the bot from the group %s", full_name, chat.title)
             # _context.bot_data.setdefault("group_ids", set()).discard(chat.id)
@@ -390,13 +384,13 @@ async def ensure_user(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> No
     """
     username, full_name, user_id, chat_id, topic_id, msg_text = await get_ids(update)
 
-    service.chat_manager.get_or_create_user(user_id, username, full_name)
+    await service.chat_manager.get_or_create_user(user_id, username, full_name)
 
 
 @log_decorator
 async def invite_link_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Хэндлер для сообщений с ссылками-приглашениями в чат.
+    Хэндлер для ссылок-приглашений.
     Добавляет чат в список разрешённых для бота. То же самое что и `/start`.
     """
     await service.process_invite(update, context)
@@ -405,7 +399,7 @@ async def invite_link_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
 @log_decorator
 async def web_link_handler(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Хэндлер для сообщений с ссылками на сайты.
+    Хэндлер для ссылок на сайты.
     Получает контент с сайта и отправляет в ллм.
     """
     logger.info("Not supported yet.")
@@ -421,7 +415,7 @@ async def pdf_handler(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> No
     username, full_name, user_id, chat_id, topic_id, msg_text = await get_ids(update)
     msg = await update.message.reply_text("Пишет...")
 
-    topic_settings = service.chat_manager.get_topic_settings(chat_id, topic_id)
+    topic_settings = await service.chat_manager.get_topic_settings(chat_id, topic_id)
     llm_resp_text = await service.send_pdf_message(update, user_id, chat_id, topic_id)
     await send_msg_as_md(update, msg, llm_resp_text, md_v2_mode=topic_settings.get("md_v2_mode", False))  # todo
 

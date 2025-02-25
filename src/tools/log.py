@@ -28,7 +28,6 @@ def get_logger(name: str):
 
     stream_handler = logging.StreamHandler(stream=sys.stdout)
     stream_handler.setLevel(logging.INFO)
-    stream_handler.addFilter(lambda record: record.levelname != "ERROR")
     # stream_handler.setFormatter(formatter)
     logger.addHandler(stream_handler)
 
