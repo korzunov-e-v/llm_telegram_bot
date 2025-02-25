@@ -19,6 +19,10 @@ langchain-text-splitters = "^0.3.5"
 pdf2txt = "^0.7.14"
 telegramify-markdown = "^0.4.2"
 openai = "^1.63.2"
+pydantic-ai-slim = {extras = ["anthropic", "openai"], version = "^0.0.24"}
+tiktoken = "^0.9.0"
+aiohttp = "^3.11.12"
+aiofiles = "^24.1.0"
 
 
 [tool.poetry.group.dev.dependencies]
