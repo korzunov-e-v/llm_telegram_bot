@@ -1,20 +1,19 @@
-import os
-
-from dotenv import load_dotenv
-
-load_dotenv()
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class Settings:
-    default_temperature: float = 0.7
-    default_max_tokens: int = 4096
-    default_model: str = "claude-3-5-haiku-latest"
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    bot_token = os.getenv("BOT_TOKEN")
-    anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
-    mongo_url = os.getenv("MONGO_URL")
-    admin_token: list[int] = os.getenv("ADMIN_TOKEN", "secret-token")
-    debug: bool = os.getenv("DEBUG", False)
+    default_temperature: float = Field(0.7)
+    default_max_tokens: int = Field(4096)
+    default_model: str = Field("claude-3-5-haiku-latest")
+
+    bot_token: str = Field()
+    anthropic_api_key: str = Field()
+    mongo_url: str = Field()
+    admin_token: str = Field("secret-token")
+    debug: bool = Field(False)
 
 
 settings = Settings()

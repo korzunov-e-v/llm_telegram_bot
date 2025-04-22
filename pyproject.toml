@@ -10,7 +10,6 @@ package-mode = false
 
 [tool.poetry.dependencies]
 python = "^3.12"
-python-dotenv = "^1.0.1"
 python-telegram-bot = {extras = ["job-queue"], version = "^21.10"}
 anthropic = "0.47.1"
 pymongo = {extras = ["srv"], version = "^4.10.1"}
@@ -23,6 +22,7 @@ pydantic-ai-slim = {extras = ["anthropic", "openai"], version = "^0.0.24"}
 tiktoken = "^0.9.0"
 aiohttp = "^3.11.12"
 aiofiles = "^24.1.0"
+pydantic-settings = "^2.9.1"
 
 
 [tool.poetry.group.dev.dependencies]
