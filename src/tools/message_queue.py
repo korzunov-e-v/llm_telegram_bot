@@ -80,11 +80,11 @@ async def delay_send(_context: ContextTypes.DEFAULT_TYPE) -> None:
     llm_resp_text = await service.process_txt_message(message, user_id, chat_id, topic_id)
     update = _context.job.data["update"]
     msg: Message = _context.job.data["msg"]
-    await send_msg_as_md(update, msg, llm_resp_text, md_v2_mode)
+    await send_msg_as_md(update, llm_resp_text, md_v2_mode, msg)
 
 
 @log_decorator
-async def send_msg_as_md(update, msg, llm_resp_text: str, md_v2_mode: bool = False):
+async def send_msg_as_md(update, llm_resp_text: str, md_v2_mode: bool = False, msg_for_delete=None):
     try:
         sections = MarkdownTextSplitter(chunk_overlap=0, keep_separator="end").split_text(llm_resp_text)
         for i, section in enumerate(sections):
@@ -102,4 +102,5 @@ async def send_msg_as_md(update, msg, llm_resp_text: str, md_v2_mode: bool = Fal
         await update.message.reply_text("Произошла ошибка, попробуйте снова.", parse_mode=ParseMode.MARKDOWN)
         logger.error(traceback.format_exc())
     finally:
-        await msg.delete()
+        if msg_for_delete:
+            await msg_for_delete.delete()

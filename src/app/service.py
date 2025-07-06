@@ -298,10 +298,7 @@ class MessageProcessingFacade:
 
     async def get_users(self, bot: Bot) -> str:
         users = await self.chat_manager.get_users()
-        message = ""
-        message += (
-            f"Инфо:\n\n"
-        )
+        message = f"Инфо:\n\n"
         templ = (
             "Username: {username}\n"
             "ID пользователя: {user_id}\n"

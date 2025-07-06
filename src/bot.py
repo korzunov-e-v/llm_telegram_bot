@@ -1,7 +1,6 @@
 import traceback
 from contextlib import suppress
 
-from anthropic.types import ModelParam, MessageParam, TextBlockParam
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Chat
 from telegram.ext import (
     ApplicationBuilder,
@@ -100,7 +99,8 @@ async def show_models_command(update: Update, _context: ContextTypes.DEFAULT_TYP
     Отправляет inline клавиатуру с моделями.
     """
     models = await service.llm_provider.get_models()
-    keyboard_models = [[InlineKeyboardButton(f"{model["display_name"]} | {model["name"]}", callback_data=f"change_model+{model["name"]}")] for model in models]
+    keyboard_models = [[InlineKeyboardButton(f"{model["display_name"]} | {model["name"]}", callback_data=f"change_model+{model["name"]}")]
+                       for model in models]
     keyboard = keyboard_models + [[InlineKeyboardButton("Отмена", callback_data="cancel+0")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text("Выберите модель:", reply_markup=reply_markup)
@@ -134,11 +134,9 @@ async def system_prompt_change_command(update: Update, _context: ContextTypes.DE
     state[get_state_key(chat_id, topic_id)] = ChatState.PROMPT
     topic_settings = await service.chat_manager.get_topic_settings(chat_id, topic_id)
     current_prompt = topic_settings["system_prompt"]
-    await update.message.reply_text(
-        'Отправьте новый промпт, /cancel для отмены или /empty для сброса промпта.\n'
-        f'Текущий промпт: {service.chat_manager.format_system_prompt(current_prompt)}',
-        parse_mode="Markdown",
-    )
+    resp_text = ('Отправьте новый промпт, /cancel для отмены или /empty для сброса промпта.\n'
+                 f'Текущий промпт: {service.chat_manager.format_system_prompt(current_prompt)}')
+    await send_msg_as_md(update, resp_text, "Markdown")
 
 
 @log_decorator
@@ -238,7 +236,7 @@ async def user_info_command(update: Update, _context: ContextTypes.DEFAULT_TYPE)
     """
     user_id = update.effective_user.id
     message = await service.get_user_info_message(user_id, _context.bot)
-    await update.message.reply_text(message)
+    await send_msg_as_md(update, message, "Markdown")
 
 
 @log_decorator
@@ -262,7 +260,7 @@ async def topic_info_command(update: Update, _context: ContextTypes.DEFAULT_TYPE
     username, full_name, user_id, chat_id, topic_id, msg_text = await get_ids(update)
 
     message = await service.get_topic_info_message(chat_id, topic_id, user_id, _context.bot)
-    await update.message.reply_text(message, parse_mode="Markdown")
+    await send_msg_as_md(update, message, "Markdown")
 
 
 # ADMIN
@@ -297,7 +295,7 @@ async def admin_users_command(update: Update, _context: ContextTypes.DEFAULT_TYP
     user_info = await service.chat_manager.get_user_info(user_id)
     if user_info["is_admin"]:
         message = await service.get_users(_context.bot)
-        await update.message.reply_text(message)
+        await send_msg_as_md(update, message, "Markdown")
 
 
 # TEXT
@@ -417,7 +415,7 @@ async def pdf_handler(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> No
 
     topic_settings = await service.chat_manager.get_topic_settings(chat_id, topic_id)
     llm_resp_text = await service.send_pdf_message(update, user_id, chat_id, topic_id)
-    await send_msg_as_md(update, msg, llm_resp_text, md_v2_mode=topic_settings.get("md_v2_mode", False))  # todo
+    await send_msg_as_md(update, llm_resp_text, md_v2_mode=topic_settings.get("md_v2_mode", False), msg_for_delete=msg)  # todo
 
 
 @log_decorator
