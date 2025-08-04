@@ -1,30 +1,22 @@
-FROM python:3.12-slim AS builder
+FROM python:3.12-alpine AS builder
 
 WORKDIR /srv
 
-ENV POETRY_VIRTUALENVS_IN_PROJECT=1 \
-    POETRY_VIRTUALENVS_CREATE=1 \
-    POETRY_CACHE_DIR=/tmp/poetry_cache
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy
 
-COPY pyproject.toml /srv
-COPY poetry.lock /srv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-RUN --mount=target=/var/lib/apt/lists,type=cache,mode=0777,sharing=locked \
-    --mount=target=/var/cache/apt,type=cache,mode=0777,sharing=locked \
-    --mount=target=/root/.cache/pypoetry/cache,type=cache,mode=0777,sharing=locked \
-    --mount=target=/root/.cache/pip,type=cache,mode=0777,sharing=locked \
-    rm -f /etc/apt/apt.conf.d/docker-clean && \
-    pip install poetry==1.8.3 && \
-    poetry install --without dev
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    uv sync --locked --no-install-project
 
-
-
-
-FROM python:3.12-slim AS runtime
+FROM python:3.12-alpine AS runtime
 
 ENV VIRTUAL_ENV=/srv/.venv \
     PATH="/srv/.venv/bin:$PATH" \
-    PYTHONPATH="$PYTHONPATH:/srv"
+    PYTHONPATH="/srv"
 
 COPY --from=builder ${VIRTUAL_ENV} ${VIRTUAL_ENV}
 

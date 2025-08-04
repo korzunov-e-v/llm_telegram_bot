@@ -1,6 +1,7 @@
 import asyncio
 import traceback
 from collections import defaultdict
+from typing import Literal
 
 import telegramify_markdown
 from langchain_text_splitters import MarkdownTextSplitter
@@ -84,12 +85,12 @@ async def delay_send(_context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 @log_decorator
-async def send_msg_as_md(update, llm_resp_text: str, md_v2_mode: bool = False, msg_for_delete=None):
+async def send_msg_as_md(update, llm_resp_text: str, md_mode: Literal["Markdown", "Markdown_v2"] = "Markdown", msg_for_delete=None):
     try:
         sections = MarkdownTextSplitter(chunk_overlap=0, keep_separator="end").split_text(llm_resp_text)
         for i, section in enumerate(sections):
             try:
-                if md_v2_mode:
+                if md_mode == "Markdown_v2":
                     parse_mode = ParseMode.MARKDOWN_V2
                     section = telegramify_markdown.markdownify(section)
                 else:

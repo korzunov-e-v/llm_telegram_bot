@@ -3,7 +3,7 @@ import os
 import re
 import traceback
 
-import pdf2txt
+# import pdf2txt  # disabled
 import sys
 from pathlib import Path
 
@@ -15,7 +15,8 @@ logger = get_logger(__name__)
 
 
 async def load_from_large_pdf(file_path: Path) -> str | None:
-    assert pdf2txt.__name__
+    # disabled
+    # assert pdf2txt.__name__
 
     tmp_file_name = f"{file_path.name}_temp"
     tmp_path = file_path.parent.joinpath(tmp_file_name)

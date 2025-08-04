@@ -16,4 +16,5 @@ class Settings(BaseSettings):
     debug: bool = Field(False)
 
 
+# noinspection PyArgumentList
 settings = Settings()

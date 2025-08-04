@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from itertools import groupby
-from typing import Type
+from typing import Type, List
 
 import aiohttp
 import tiktoken
@@ -10,11 +10,11 @@ from pydantic_ai.messages import ModelRequest, SystemPromptPart, UserPromptPart,
 from pydantic_ai.models import ModelRequestParameters, Model
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.settings import ModelSettings
 
 from src.config import settings
 from src.models import MessageModel, LlmProviderSendResponse, AvailableModel
-from src.tools.AnthropicModelCustom import AnthropicModelCustom
 
 
 class AbstractLlmProvider(ABC):
@@ -64,7 +64,7 @@ class BaseLlmProvider(AbstractLlmProvider):
 
         grouped_messages: list[list[MessageModel]] = [list(group) for key, group in groupby(messages, lambda x: x["role"])]
 
-        messages_to_send: list[ModelMessage] = []
+        messages_to_send: List[ModelMessage] = []
         for group in grouped_messages:
             if group[0]["role"] == "user":
                 parts = [UserPromptPart(content=m["content"]) for m in group]
@@ -78,14 +78,13 @@ class BaseLlmProvider(AbstractLlmProvider):
             messages_to_send[0].parts.insert(0, system_prompt_part)
 
         model_settings = ModelSettings(max_tokens=max_tokens, temperature=temp)
-        model_request_parameters = ModelRequestParameters(function_tools=[], allow_text_result=True, result_tools=[])
 
-        response = await ai_model.request(
+        response: ModelResponse = await ai_model.request(
             messages=messages_to_send,
             model_settings=model_settings,
-            model_request_parameters=model_request_parameters,
+            model_request_parameters=ModelRequestParameters(),
         )
-        return LlmProviderSendResponse(model_response=response[0], usage=response[1])
+        return LlmProviderSendResponse(model_response=response, usage=response.usage)
 
     @abstractmethod
     async def count_tokens(self, model: str, messages: list[MessageModel]) -> int:
@@ -104,7 +103,7 @@ class AnthropicLlmProvider(BaseLlmProvider):
         self.extra_headers_cache = {"anthropic-beta": "prompt-caching-2024-07-31"}
 
     def _get_ai_instance(self, model: str) -> AnthropicModel:
-        return AnthropicModelCustom(model_name=model, anthropic_client=AsyncAnthropic(api_key=self._api_key, base_url=self._base_url))
+        return AnthropicModel(model_name=model, anthropic_client=AsyncAnthropic(api_key=self._api_key, base_url=self._base_url))
 
     async def count_tokens(self, model: str, messages: list[MessageModel]) -> int:
         if len(messages) == 0:
@@ -128,8 +127,9 @@ class OpenAiLlmProvider(BaseLlmProvider):
         model_class = OpenAIModel
         super().__init__(api_key, base_url, model_class)
 
+    # noinspection PyTypeChecker
     def _get_ai_instance(self, model: str) -> OpenAIModel:
-        return OpenAIModel(model_name=model, base_url=self._base_url, api_key=self._api_key)
+        return OpenAIModel(model_name=model, provider=OpenAIProvider(base_url=self._base_url, api_key=self._api_key))
 
     async def count_tokens(self, model: str, messages: list[MessageModel]) -> int:
         enc = tiktoken.encoding_for_model(model)

@@ -70,7 +70,7 @@ async def hello_command(update: Update, _context: ContextTypes.DEFAULT_TYPE):
     """
     Команда проверки связи для бота.
 
-    Проверяет что tg бот и ллм могут принимать и отправлять сообщения.
+    Проверяет, что tg бот и ллм могут принимать и отправлять сообщения.
     """
     username, full_name, user_id, chat_id, topic_id, msg_text = await get_ids(update)
     msg = await update.message.reply_text(f'tg: Hello {username}\nllm: ...')
@@ -415,7 +415,7 @@ async def pdf_handler(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> No
 
     topic_settings = await service.chat_manager.get_topic_settings(chat_id, topic_id)
     llm_resp_text = await service.send_pdf_message(update, user_id, chat_id, topic_id)
-    await send_msg_as_md(update, llm_resp_text, md_v2_mode=topic_settings.get("md_v2_mode", False), msg_for_delete=msg)  # todo
+    await send_msg_as_md(update, llm_resp_text, md_mode=topic_settings.get("md_v2_mode", False), msg_for_delete=msg)  # todo
 
 
 @log_decorator
@@ -431,7 +431,7 @@ def build_app(bot_token: str) -> Application:
     """
     Регистрирует хэндлеры и возвращает инстанс бота.
 
-    :param bot_token: tg токен бота, см BotFather
+    :param bot_token: токен бота, см BotFather
     :return: Инстанс приложения бота
     """
     topic_filter = TopicFilter()
