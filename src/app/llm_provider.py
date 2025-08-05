@@ -11,6 +11,7 @@ from pydantic_ai.models import ModelRequestParameters, Model
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.openai import OpenAIProvider
+from pydantic_ai.providers.anthropic import AnthropicProvider
 from pydantic_ai.settings import ModelSettings
 
 from src.config import settings
@@ -103,7 +104,15 @@ class AnthropicLlmProvider(BaseLlmProvider):
         self.extra_headers_cache = {"anthropic-beta": "prompt-caching-2024-07-31"}
 
     def _get_ai_instance(self, model: str) -> AnthropicModel:
-        return AnthropicModel(model_name=model, anthropic_client=AsyncAnthropic(api_key=self._api_key, base_url=self._base_url))
+        return AnthropicModel(
+            model_name=model,
+            provider=AnthropicProvider(
+                anthropic_client=AsyncAnthropic(
+                    api_key=self._api_key,
+                    base_url=self._base_url,
+                )
+            )
+        )
 
     async def count_tokens(self, model: str, messages: list[MessageModel]) -> int:
         if len(messages) == 0:

@@ -1,8 +1,6 @@
 import asyncio
-# import os
 import re
 from datetime import datetime, UTC
-# from pathlib import Path
 
 from telegram import Bot, Update
 from telegram.ext import ContextTypes
@@ -14,7 +12,6 @@ from src.app.message_repo import MessageRepository
 from src.config import settings
 from src.models import MessageModel, LlmProviderSendResponse
 from src.tools.log import get_logger
-# from src.tools.pdf_tool import load_from_large_pdf
 
 logger = get_logger(__name__)
 
@@ -69,85 +66,6 @@ class MessageProcessingFacade:
             await update.message.reply_text(f"Что-то пошло не так :(")
             logger.error(f"Ошибка при обработке ссылки: {str(e)}")
 
-    async def send_pdf_message(self, update: Update, user_id: int, chat_id: int, topic_id: int) -> str:
-        return "Not supported yet."
-        # if topic_id is None:
-        #     topic_id = 1
-        # topic_info = await self.chat_manager.get_or_create_topic_info(chat_id, topic_id)
-        # topic_settings = topic_info["settings"]
-        #
-        # filename = update.message.document.file_name
-        # doc = await update.message.document.get_file(read_timeout=30, connect_timeout=30)
-        # bo = bytearray()
-        # await doc.download_as_bytearray(bo)
-        # download_path = Path(f"tmp")
-        # download_path.mkdir(exist_ok=True)
-        # doc_path = download_path.joinpath(filename)
-        # doc_path = await doc.download_to_drive(doc_path)
-        # # pdf_data = base64.standard_b64encode(bo).decode("utf-8")
-        #
-        # context = await self.chat_manager.get_context(chat_id, topic_id, topic_settings["offset"])
-        #
-        # txt = await load_from_large_pdf(doc_path)
-        # os.remove(doc_path)
-        # if not txt:
-        #     return "Ошибка парсинга файла."
-        # logger.info(f"parsed {doc_path}. txt_len={len(txt)}")
-
-        ## todo: pdf anthropic
-        ## if topic_settings.get("parse_pdf", True):
-        ##     txt = await load_from_large_pdf(doc_path)
-        ##     logger.info(f"parsed {doc_path}. txt_len={len(txt)}")
-        ##     if not txt:
-        ##         return "Ошибка парсинга файла."
-        ##     os.remove(doc_path)
-        ##     source = PlainTextSourceParam(data=txt, media_type="text/plain", type="text")
-        ## else:
-        ##     source = Base64PDFSourceParam(data=pdf_data, media_type="application/pdf", type="base64")
-        ##
-        ## user_doc_message = MessageParam(
-        ##     content=[
-        ##         DocumentBlockParam(
-        ##             source=source,
-        ##             type="document",
-        ##             cache_control=CacheControlEphemeralParam(type="ephemeral"),
-        ##             citations=CitationsConfigParam(enabled=True),
-        ##         ),
-        ##     ],
-        ##     role="user"
-        ## )
-        ## user_message = MessageParam(content=[TextBlockParam(text=update.message.text or update.message.caption, type="text")], role="user")
-
-        # txt = "Далее будет содержимое файла документа, по нему будут вопросы.\n\nPDF file content:\n\n\n" + txt
-        # user_doc_message = MessageModel(content=txt, role="user")
-        # user_message = MessageModel(content=update.message.text or update.message.caption, role="user")
-        #
-        # messages = context + [user_doc_message, user_message]
-        # llm_resp = await self.send_messages(messages, user_id, chat_id, topic_id, cache=True)
-        # # llm_resp_text = self.join_llm_response(llm_resp)  # todo: for anthropic citations
-        # llm_resp_text = llm_resp["model_response"].parts[0].content
-        # return llm_resp_text
-
-    # todo: its for anthropic citations
-    # @staticmethod
-    # def join_llm_response(llm_resp: LlmProviderSendResponse) -> str:
-    #     """With citations"""
-    #     content = llm_resp["model_response"].parts[0].content
-    #     result = ""
-    #     for part in content:
-    #         result += part.text.strip() + "\n"
-    #         if part.citations:
-    #             for cit in part.citations:
-    #                 lines = cit.cited_text.split("\n")
-    #                 text = "\n> ".join(lines)
-    #                 result += '> ' + text + "\n\n"
-    #         result = result.strip("> \n")
-    #         result = result.strip()
-    #         result += "\n\n"
-    #     result = result.strip()
-    #     result = re.sub("\n{2,}", "\n\n", result)
-    #     result = re.sub("(> ?\n)*", "", result)
-    #     return result
 
     async def send_messages(self, messages: list[MessageModel], user_id: int, chat_id: int, topic_id: int, cache: bool = None) -> LlmProviderSendResponse:
         if topic_id is None:
@@ -164,17 +82,6 @@ class MessageProcessingFacade:
                 break
         user_messages = user_messages[::-1]
         input_sing_tokens_count = [await self.llm_provider.count_tokens(topic_settings["model"], [mes]) for mes in user_messages]
-
-        # todo: cache
-        # cache_used_in_context = False
-        # for mes in context:
-        #     for m in mes["content"]:
-        #         if m.get("cache_control"):
-        #             cache_used_in_context = True
-        #             break
-        #
-        # if cache_used_in_context:
-        #     messages[-1]["content"][0]["cache_control"] = {"type": "ephemeral"}
 
         u_dt = datetime.now(UTC)
         response = await self.llm_provider.send_messages(
@@ -216,20 +123,6 @@ class MessageProcessingFacade:
                 timestamp=u_dt,
             )
 
-        # todo: its for anthropic
-        # if settings.debug:
-        #     input_tokens = response.usage.input_tokens
-        #     output_tokens = response.usage.output_tokens
-        #     input_tokens_cache_read = getattr(response.usage, 'cache_read_input_tokens', '---')
-        #     input_tokens_cache_create = getattr(response.usage, 'cache_creation_input_tokens', '---')
-        #     print(f"User input tokens: {input_tokens}")
-        #     print(f"Output tokens: {output_tokens}")
-        #     print(f"Input tokens (cache read): {input_tokens_cache_read}")
-        #     print(f"Input tokens (cache write): {input_tokens_cache_create}")
-        #     total_input_tokens = input_tokens + (int(input_tokens_cache_read) if input_tokens_cache_read != '---' else 0)
-        #     percentage_cached = (int(input_tokens_cache_read) / total_input_tokens * 100 if input_tokens_cache_read != '---' and total_input_tokens > 0 else 0)
-        #     print(f"{percentage_cached:.1f}% of input prompt cached ({total_input_tokens} tokens)")
-
         return response
 
     async def process_txt_message(self, message_text: str, user_id: int, chat_id: int, topic_id: int) -> str:
@@ -246,7 +139,6 @@ class MessageProcessingFacade:
         messages = context + [user_message]
 
         llm_resp = await self.send_messages(messages, user_id, chat_id, topic_id)
-        # llm_resp_text = self.join_llm_response(llm_resp)  # todo: for anthropic citations
         llm_resp_text = llm_resp["model_response"].parts[0].content
         return llm_resp_text
 

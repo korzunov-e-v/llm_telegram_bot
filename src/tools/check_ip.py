@@ -2,8 +2,6 @@ import requests
 
 from src.tools.log import get_logger
 
-# ip = requests.get('https://api.ipify.org').content.decode('utf8')
-
 logger = get_logger(__name__)
 
 

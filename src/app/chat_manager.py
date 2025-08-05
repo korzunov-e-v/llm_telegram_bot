@@ -23,11 +23,6 @@ class ChatManager:
         topics_dict = chat_info["allowed_topics"]
         return [int(k) for k, v in topics_dict.items() if v]
 
-    #     def set_allowed_topics(self, chat_id: int, topics: list[int]):
-    #         user = self.get_user(chat_id)
-    #         user["allowed_topics"] = {str(k): True for k, v in topics}
-    #         self.update_user(user)
-
     async def add_allowed_topic(self, chat_id: int, topic_id: int, user_id: int) -> None:
         if topic_id is None:
             topic_id = 1
@@ -112,7 +107,7 @@ class ChatManager:
         await self._db_provider.update_topic_info(topic_info, topic_info["chat_id"])
 
     # USERS
-    async def create_new_user(self, user_id: int, username: str, full_name: str):
+    async def create_new_user(self, user_id: int, username: str, full_name: str) -> UserInfo:
         doc_user = self.__get_default_user_info(user_id, username, full_name)
         _doc_chat = await self.get_or_create_chat_info(user_id, user_id)
         _doc_topic = await self.get_or_create_topic_info(chat_id=user_id, topic_id=1)
@@ -124,7 +119,7 @@ class ChatManager:
         if user_info:
             return user_info
         else:
-            await self.create_new_user(user_id, username, full_name)
+            return await self.create_new_user(user_id, username, full_name)
 
     async def get_user_info(self, user_id: int) -> UserInfo:
         user_info = await self._db_provider.get_user_info(user_id)

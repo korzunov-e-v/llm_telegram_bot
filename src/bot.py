@@ -349,30 +349,16 @@ async def track_chats_handler(update: Update, _context: ContextTypes.DEFAULT_TYP
     chat = update.effective_chat
     if chat.type == Chat.PRIVATE:
         if not was_member and is_member:
-            # This may not be really needed in practice because most clients will automatically
-            # send a /start command after the user unblocks the bot, and start_private_chat()
-            # will add the user to "user_ids".
-            # We're including this here for the sake of the example.
             logger.info("%s unblocked the bot", full_name)
-            # _context.bot_data.setdefault("user_ids", set()).add(chat.id)
             await service.new_private_chat(user_id, username, full_name)
         elif was_member and not is_member:
             logger.info("%s blocked the bot", full_name)
-            # _context.bot_data.setdefault("user_ids", set()).discard(chat.id)
     elif chat.type in [Chat.GROUP, Chat.SUPERGROUP]:
         if not was_member and is_member:
             logger.info("%s added the bot to the group %s", full_name, chat.title)
-            # _context.bot_data.setdefault("group_ids", set()).add(chat.id)
             await service.new_group(user_id, username, full_name, chat_id)
         elif was_member and not is_member:
             logger.info("%s removed the bot from the group %s", full_name, chat.title)
-            # _context.bot_data.setdefault("group_ids", set()).discard(chat.id)
-    # elif not was_member and is_member:
-    #     logger.info("%s added the bot to the channel %s", full_name, chat.title)
-    #     _context.bot_data.setdefault("channel_ids", set()).add(chat.id)
-    # elif was_member and not is_member:
-    #     logger.info("%s removed the bot from the channel %s", full_name, chat.title)
-    #     _context.bot_data.setdefault("channel_ids", set()).discard(chat.id)
 
 
 @log_decorator
