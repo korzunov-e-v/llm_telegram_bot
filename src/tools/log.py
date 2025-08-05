@@ -4,7 +4,7 @@ import time
 
 from telegram import Update
 
-from src.tools.update_getters import get_ids
+from src.tools.update_getters import get_update_info
 
 logging.getLogger("httpx").setLevel(logging.ERROR)
 logging.getLogger("apscheduler.executors.default").setLevel(logging.WARNING)
@@ -45,7 +45,8 @@ def log_decorator(func):
             msg_text = args[1]
             update = context.job.data["update"]
 
-        username, full_name, user_id, chat_id, topic_id, msg_text = await get_ids(update)
+        update_info = await get_update_info(update)
+        username, full_name, user_id, chat_id, topic_id, msg_text = update_info.__dict__.values()
         ts1 = time.time_ns()
         result = await func(*args, **kwargs)
         ts2 = time.time_ns()

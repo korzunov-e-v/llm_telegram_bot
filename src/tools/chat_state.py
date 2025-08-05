@@ -17,7 +17,7 @@ def get_state_key(chat_id: int, topic_id: int) -> str:
     :param topic_id: id топика/темы в чате в tg
     :return: строка `f"{chat_id}+{topic_id}"`
     """
-    return f"{chat_id}+{topic_id}"
+    return f"chat_{chat_id}+topic_{topic_id}"
 
 
 state: dict[str, ChatState] = {}  # {f"{chat_id}+{topic_id}": "state"}

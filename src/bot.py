@@ -15,12 +15,12 @@ from telegram.ext import (
 
 from src.app.service import message_processing_facade as service
 from src.config import settings
-from src.filters import TopicFilter, InviteLinkFilter, WebLinkFilter
+from src.filters import TopicFilter
 from src.models import MessageModel
 from src.tools.chat_state import get_state_key, state, ChatState
 from src.tools.log import get_logger, log_decorator
 from src.tools.message_queue import get_queue_key, messages_queue, delay_send, send_msg_as_md
-from src.tools.update_getters import get_ids, extract_status_change
+from src.tools.update_getters import get_update_info, extract_status_change
 
 logger = get_logger(__name__)
 
@@ -34,14 +34,14 @@ async def start_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> 
     Разрешает отправлять сообщения в этот чат/топик.
     По-умолчанию боту не разрешено отправлять сообщения в групповые чаты, даже если бот уже участник и админ.
     """
-    username, full_name, user_id, chat_id, topic_id, msg_text = await get_ids(update)
+    update_info = await get_update_info(update)
 
-    await service.chat_manager.get_or_create_user(user_id, username, full_name)
-    allowed_topics = await service.chat_manager.get_allowed_topics(chat_id, user_id)
-    if topic_id in allowed_topics:
+    await service.chat_manager.get_or_create_user(update_info.user_id, update_info.username, update_info.full_name)
+    allowed_topics = await service.chat_manager.get_allowed_topics(update_info.chat_id, update_info.user_id)
+    if update_info.topic_id in allowed_topics:
         await update.message.reply_text("Бот уже тут.")
     else:
-        await service.chat_manager.add_allowed_topic(chat_id, topic_id, user_id)
+        await service.chat_manager.add_allowed_topic(update_info.chat_id, update_info.topic_id, update_info.user_id)
         await update.message.reply_text("Бот добавлен в чат.")
 
 
@@ -52,9 +52,9 @@ async def stop_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> N
 
     Запрещает боту отправлять сообщения в этот чат/топик.
     """
-    username, full_name, user_id, chat_id, topic_id, msg_text = await get_ids(update)
+    update_info = await get_update_info(update)
 
-    res = await service.chat_manager.remove_allowed_topics(chat_id, topic_id, user_id)
+    res = await service.chat_manager.remove_allowed_topics(update_info.chat_id, update_info.topic_id, update_info.user_id)
     if not res:
         await update.message.reply_text("Не ожидалось этой команды.")
         return
@@ -72,22 +72,22 @@ async def hello_command(update: Update, _context: ContextTypes.DEFAULT_TYPE):
 
     Проверяет, что tg бот и ллм могут принимать и отправлять сообщения.
     """
-    username, full_name, user_id, chat_id, topic_id, msg_text = await get_ids(update)
-    msg = await update.message.reply_text(f'tg: Hello {username}\nllm: ...')
+    update_info = await get_update_info(update)
+    msg = await update.message.reply_text(f'tg: Hello {update_info.username}\nllm: ...')
     try:
         response = await service.llm_provider.send_messages(
             model="claude-3-5-haiku-latest",
             messages=[MessageModel(content="На связи?", role="user")],
-            user_id=user_id,
+            user_id=update_info.user_id,
             temp=1,
             max_tokens=10,
         )
         llm_resp = response["model_response"].parts[0].content
-        await msg.edit_text(f'tg: Hello {username}\nllm: {llm_resp}')
+        await msg.edit_text(f'tg: Hello {update_info.username}\nllm: {llm_resp}')
     except Exception as e:
         logger.error("hello command error: ", exc_info=e)
         logger.error(traceback.format_exc())
-        await msg.edit_text(f'tg: Hello {username}\nllm: <error>')
+        await msg.edit_text(f'tg: Hello {update_info.username}\nllm: <error>')
 
 
 # TOPIC SETTINGS
@@ -113,12 +113,12 @@ async def button_change_model(update: Update, _context: ContextTypes.DEFAULT_TYP
 
     Изменяет модель для чата/топика.
     """
-    username, full_name, user_id, chat_id, topic_id, msg_text = await get_ids(update)
+    update_info = await get_update_info(update)
 
     query = update.callback_query
     await query.answer()
     model = query.data.split("+")[1]
-    await service.chat_manager.change_model(chat_id, topic_id, model)
+    await service.chat_manager.change_model(update_info.chat_id, update_info.topic_id, model)
     await query.edit_message_text(text=f"Выбрана модель: {model}")
 
 
@@ -129,10 +129,10 @@ async def system_prompt_change_command(update: Update, _context: ContextTypes.DE
 
     Устанавливает ChatState для чата/топика равным ChatState.PROMPT.
     """
-    username, full_name, user_id, chat_id, topic_id, msg_text = await get_ids(update)
+    update_info = await get_update_info(update)
 
-    state[get_state_key(chat_id, topic_id)] = ChatState.PROMPT
-    topic_settings = await service.chat_manager.get_topic_settings(chat_id, topic_id)
+    state[get_state_key(update_info.chat_id, update_info.topic_id)] = ChatState.PROMPT
+    topic_settings = await service.chat_manager.get_topic_settings(update_info.chat_id, update_info.topic_id)
     current_prompt = topic_settings["system_prompt"]
     resp_text = ('Отправьте новый промпт, /cancel для отмены или /empty для сброса промпта.\n'
                  f'Текущий промпт: {service.chat_manager.format_system_prompt(current_prompt)}')
@@ -146,10 +146,10 @@ async def temperature_change_command(update: Update, _context: ContextTypes.DEFA
 
     Устанавливает ChatState для чата/топика равным ChatState.TEMPERATURE.
     """
-    username, full_name, user_id, chat_id, topic_id, msg_text = await get_ids(update)
+    update_info = await get_update_info(update)
 
-    state[get_state_key(chat_id, topic_id)] = ChatState.TEMPERATURE
-    topic_settings = await service.chat_manager.get_topic_settings(chat_id, topic_id)
+    state[get_state_key(update_info.chat_id, update_info.topic_id)] = ChatState.TEMPERATURE
+    topic_settings = await service.chat_manager.get_topic_settings(update_info.chat_id, update_info.topic_id)
     await update.message.reply_text(
         'Отправьте значение температуры (креативность/непредсказуемость модели), /cancel для отмены или /empty для сброса.\n'
         f'Текущая температура: {topic_settings["temperature"]}\n'
@@ -164,11 +164,11 @@ async def clear_context_command(update: Update, _context: ContextTypes.DEFAULT_T
 
     Устанавливает offset для чата/топика равным количеству сообщений.
     """
-    username, full_name, user_id, chat_id, topic_id, msg_text = await get_ids(update)
+    update_info = await get_update_info(update)
 
-    message = await service.get_topic_info_message(chat_id, topic_id, user_id, _context.bot, with_prompt=False)
+    message = await service.get_topic_info_message(update_info.chat_id, update_info.topic_id, update_info.user_id, _context.bot, with_prompt=False)
     message += "\nКонтекст очищен."
-    await service.chat_manager.clear_context(chat_id, topic_id)
+    await service.chat_manager.clear_context(update_info.chat_id, update_info.topic_id)
     await send_msg_as_md(update, message, "Markdown")
 
 
@@ -178,10 +178,10 @@ async def cancel_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) ->
     """
     Команда отмены. Сбрасывает ChatState для чата/топика.
     """
-    username, full_name, user_id, chat_id, topic_id, msg_text = await get_ids(update)
+    update_info = await get_update_info(update)
 
     with suppress(KeyError):
-        del state[get_state_key(chat_id, topic_id)]
+        del state[get_state_key(update_info.chat_id, update_info.topic_id)]
         await update.message.reply_text("Отменено.")
         return
     await update.message.reply_text("Команды не ожидалось.")
@@ -192,16 +192,16 @@ async def empty_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> 
     """
     Команда для сброса настройки. Ожидается ChatState для чата/топика.
     """
-    username, full_name, user_id, chat_id, topic_id, msg_text = await get_ids(update)
+    update_info = await get_update_info(update)
 
-    if state.get(get_state_key(chat_id, topic_id)) == ChatState.PROMPT:
-        del state[get_state_key(chat_id, topic_id)]
-        await service.chat_manager.clear_system_prompt(chat_id, topic_id)
+    if state.get(get_state_key(update_info.chat_id, update_info.topic_id)) == ChatState.PROMPT:
+        del state[get_state_key(update_info.chat_id, update_info.topic_id)]
+        await service.chat_manager.clear_system_prompt(update_info.chat_id, update_info.topic_id)
         await update.message.reply_text("Промпт сброшен.")
         return
-    if state.get(get_state_key(chat_id, topic_id)) == ChatState.TEMPERATURE:
-        del state[get_state_key(chat_id, topic_id)]
-        await service.chat_manager.reset_temperature(chat_id, topic_id)
+    if state.get(get_state_key(update_info.chat_id, update_info.topic_id)) == ChatState.TEMPERATURE:
+        del state[get_state_key(update_info.chat_id, update_info.topic_id)]
+        await service.chat_manager.reset_temperature(update_info.chat_id, update_info.topic_id)
         await update.message.reply_text("Настройка температуры сброшена.")
         return
     await update.message.reply_text("Команды не ожидалось.")
@@ -257,9 +257,9 @@ async def topic_info_command(update: Update, _context: ContextTypes.DEFAULT_TYPE
                 токенов: 593
             Бот может отвечать в этом чате: Да
     """
-    username, full_name, user_id, chat_id, topic_id, msg_text = await get_ids(update)
+    update_info = await get_update_info(update)
 
-    message = await service.get_topic_info_message(chat_id, topic_id, user_id, _context.bot)
+    message = await service.get_topic_info_message(update_info.chat_id, update_info.topic_id, update_info.user_id, _context.bot)
     await send_msg_as_md(update, message, "Markdown")
 
 
@@ -304,31 +304,31 @@ async def text_message_handler(update: Update, _context: ContextTypes.DEFAULT_TY
     """
     Хэндлер для всех текстовых сообщений.
     """
-    username, full_name, user_id, chat_id, topic_id, msg_text = await get_ids(update)
-    state_key = get_state_key(chat_id, topic_id)
-    queue_key = get_queue_key(user_id, topic_id)
-    topic_settings = await service.chat_manager.get_topic_settings(chat_id, topic_id)
+    update_info = await get_update_info(update)
+    state_key = get_state_key(update_info.chat_id, update_info.topic_id)
+    queue_key = get_queue_key(update_info.user_id, update_info.topic_id)
+    topic_settings = await service.chat_manager.get_topic_settings(update_info.chat_id, update_info.topic_id)
 
     msg = await update.message.reply_text("Пишет...")
 
     if state.get(state_key) == ChatState.PROMPT:
-        await service.chat_manager.set_system_prompt(msg_text, chat_id, topic_id)
+        await service.chat_manager.set_system_prompt(update_info.msg_text, update_info.chat_id, update_info.topic_id)
         del state[state_key]
         await msg.edit_text("Промпт установлен.")
         return
     if state.get(state_key) == ChatState.TEMPERATURE:
-        await service.chat_manager.set_temperature(msg_text, chat_id, topic_id)
+        await service.chat_manager.set_temperature(update_info.msg_text, update_info.chat_id, update_info.topic_id)
         del state[state_key]
         await msg.edit_text("Температура установлена.")
         return
     else:
-        messages_queue[queue_key].append(msg_text)
+        messages_queue[queue_key].append(update_info.msg_text)
         _context.job_queue.run_once(
             callback=delay_send,
             when=0,
-            user_id=user_id,
-            chat_id=chat_id,
-            data={"update": update, "msg": msg, "topic_id": topic_id, "md_v2_mode": topic_settings.get("md_v2_mode", False)}
+            user_id=update_info.user_id,
+            chat_id=update_info.chat_id,
+            data={"update": update, "msg": msg, "topic_id": update_info.topic_id, "md_v2_mode": topic_settings.get("md_v2_mode", False)}
         )
 
 
@@ -343,22 +343,22 @@ async def track_chats_handler(update: Update, _context: ContextTypes.DEFAULT_TYP
         return
     was_member, is_member = result
 
-    username, full_name, user_id, chat_id, topic_id, msg_text = await get_ids(update)
+    update_info = await get_update_info(update)
 
     # Handle chat types differently:
     chat = update.effective_chat
     if chat.type == Chat.PRIVATE:
         if not was_member and is_member:
-            logger.info("%s unblocked the bot", full_name)
-            await service.new_private_chat(user_id, username, full_name)
+            logger.info("%s unblocked the bot", update_info.full_name)
+            await service.new_private_chat(update_info.user_id, update_info.username, update_info.full_name)
         elif was_member and not is_member:
-            logger.info("%s blocked the bot", full_name)
+            logger.info("%s blocked the bot", update_info.full_name)
     elif chat.type in [Chat.GROUP, Chat.SUPERGROUP]:
         if not was_member and is_member:
-            logger.info("%s added the bot to the group %s", full_name, chat.title)
-            await service.new_group(user_id, username, full_name, chat_id)
+            logger.info("%s added the bot to the group %s", update_info.full_name, chat.title)
+            await service.new_group(update_info.user_id, update_info.username, update_info.full_name, update_info.chat_id)
         elif was_member and not is_member:
-            logger.info("%s removed the bot from the group %s", full_name, chat.title)
+            logger.info("%s removed the bot from the group %s", update_info.full_name, chat.title)
 
 
 @log_decorator
@@ -366,42 +366,9 @@ async def ensure_user(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> No
     """
     При любом сообщении проверяет, есть ли пользователь в базе. Создаёт пользователя, чат и топик для ЛС.
     """
-    username, full_name, user_id, chat_id, topic_id, msg_text = await get_ids(update)
+    update_info = await get_update_info(update)
 
-    await service.chat_manager.get_or_create_user(user_id, username, full_name)
-
-
-@log_decorator
-async def invite_link_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Хэндлер для ссылок-приглашений.
-    Добавляет чат в список разрешённых для бота. То же самое что и `/start`.
-    """
-    await service.process_invite(update, context)
-
-
-@log_decorator
-async def web_link_handler(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Хэндлер для ссылок на сайты.
-    Получает контент с сайта и отправляет в ллм.
-    """
-    logger.info("Not supported yet.")
-    await update.message.reply_text("Not supported yet.")
-
-
-@log_decorator
-async def pdf_handler(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Хэндлер для сообщений с pdf файлами.
-    Получает контент и отправляет в ллм.
-    """
-    username, full_name, user_id, chat_id, topic_id, msg_text = await get_ids(update)
-    msg = await update.message.reply_text("Пишет...")
-
-    topic_settings = await service.chat_manager.get_topic_settings(chat_id, topic_id)
-    llm_resp_text = await service.send_pdf_message(update, user_id, chat_id, topic_id)
-    await send_msg_as_md(update, llm_resp_text, md_mode=topic_settings.get("md_v2_mode", False), msg_for_delete=msg)  # todo
+    await service.chat_manager.get_or_create_user(update_info.user_id, update_info.username, update_info.full_name)
 
 
 @log_decorator
@@ -421,8 +388,6 @@ def build_app(bot_token: str) -> Application:
     :return: Инстанс приложения бота
     """
     topic_filter = TopicFilter()
-    invite_link_filter = InviteLinkFilter()
-    web_link_filter = WebLinkFilter()
 
     app = ApplicationBuilder().token(bot_token).build()
     app.add_handler(ChatMemberHandler(track_chats_handler, ChatMemberHandler.MY_CHAT_MEMBER))
@@ -443,10 +408,5 @@ def build_app(bot_token: str) -> Application:
     app.add_handler(CommandHandler("i_am_admin", i_am_admin_command))
     app.add_handler(CallbackQueryHandler(button_change_model, pattern="change_model"))
     app.add_handler(CallbackQueryHandler(button_cancel, pattern="cancel"))
-    app.add_handler(MessageHandler(filters=filters.TEXT & ~filters.COMMAND & invite_link_filter & filters.ChatType.PRIVATE,
-                                   callback=invite_link_handler))
-    app.add_handler(MessageHandler(filters=filters.TEXT & ~filters.COMMAND & web_link_filter,
-                                   callback=web_link_handler))
-    app.add_handler(MessageHandler(filters=filters.Document.PDF, callback=pdf_handler))
     app.add_handler(MessageHandler(filters=filters.TEXT & ~filters.COMMAND & topic_filter, callback=text_message_handler))
     return app

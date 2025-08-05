@@ -1,13 +1,22 @@
-from typing import Optional
+from typing import Optional, Any, Coroutine
 
+from pydantic import BaseModel
 from telegram import Update, ChatMemberUpdated, ChatMember
 
+class UpdateInfo(BaseModel):
+    username: str
+    full_name: str
+    user_id: int
+    chat_id: int
+    topic_id: int
+    msg_text: str | None
 
-async def get_ids(update: Update) -> tuple[str, str, int, int, int | None, str | None]:
+
+async def get_update_info(update: Update) -> UpdateInfo:
     """
     Возвращает tuple с информацией о пользователе/чате/топике.
 
-    :return: username, full_name, user_id, chat_id, topic_id, msg_text
+    :return: UpdateInfo(username, full_name, user_id, chat_id, topic_id, msg_text)
     """
     username = update.effective_user.username
     full_name = update.effective_user.full_name
@@ -16,12 +25,12 @@ async def get_ids(update: Update) -> tuple[str, str, int, int, int | None, str |
     if update.effective_message.is_topic_message:
         topic_id = update.effective_message.message_thread_id
     else:
-        topic_id = None
+        topic_id = 1
     if update.message and update.message.text:
         msg_text = update.message.text
     else:
         msg_text = None
-    return username, full_name, user_id, chat_id, topic_id, msg_text
+    return UpdateInfo(username=username, full_name=full_name, user_id=user_id, chat_id=chat_id, topic_id=topic_id, msg_text=msg_text)
 
 
 def extract_status_change(chat_member_update: ChatMemberUpdated) -> Optional[tuple[bool, bool]]:
