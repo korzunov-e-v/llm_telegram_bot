@@ -1,7 +1,7 @@
-import traceback
 from contextlib import suppress
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Chat
+from telegram import Update, Chat
+from telegram.constants import ParseMode
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -16,10 +16,9 @@ from telegram.ext import (
 from src.app.service import message_processing_facade as service
 from src.config import settings
 from src.filters import TopicFilter
-from src.models import MessageModel
 from src.tools.chat_state import get_state_key, state, ChatState
 from src.tools.log import get_logger, log_decorator
-from src.tools.message_queue import get_queue_key, messages_queue, delay_send, send_msg_as_md
+from src.tools.message_queue import send_msg_as_md
 from src.tools.update_getters import get_update_info, extract_status_change
 
 logger = get_logger(__name__)
@@ -35,14 +34,8 @@ async def start_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> 
     По-умолчанию боту не разрешено отправлять сообщения в групповые чаты, даже если бот уже участник и админ.
     """
     update_info = await get_update_info(update)
-
-    await service.chat_manager.get_or_create_user(update_info.user_id, update_info.username, update_info.full_name)
-    allowed_topics = await service.chat_manager.get_allowed_topics(update_info.chat_id, update_info.user_id)
-    if update_info.topic_id in allowed_topics:
-        await update.message.reply_text("Бот уже тут.")
-    else:
-        await service.chat_manager.add_allowed_topic(update_info.chat_id, update_info.topic_id, update_info.user_id)
-        await update.message.reply_text("Бот добавлен в чат.")
+    reply_text = await service.start(update_info)
+    await update.message.reply_text(reply_text)
 
 
 @log_decorator
@@ -53,16 +46,8 @@ async def stop_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> N
     Запрещает боту отправлять сообщения в этот чат/топик.
     """
     update_info = await get_update_info(update)
-
-    res = await service.chat_manager.remove_allowed_topics(update_info.chat_id, update_info.topic_id, update_info.user_id)
-    if not res:
-        await update.message.reply_text("Не ожидалось этой команды.")
-        return
-
-    await update.message.reply_text(
-        "Покинул топик. Чтобы добавить снова, отправьте ссылку-приглашение боту в лc.\n"
-        "Или отправьте /start в этот чат."
-    )
+    reply_text = await service.start(update_info)
+    await update.message.reply_text(reply_text)
 
 
 @log_decorator
@@ -74,20 +59,8 @@ async def hello_command(update: Update, _context: ContextTypes.DEFAULT_TYPE):
     """
     update_info = await get_update_info(update)
     msg = await update.message.reply_text(f'tg: Hello {update_info.username}\nllm: ...')
-    try:
-        response = await service.llm_provider.send_messages(
-            model="claude-3-5-haiku-latest",
-            messages=[MessageModel(content="На связи?", role="user")],
-            user_id=update_info.user_id,
-            temp=1,
-            max_tokens=10,
-        )
-        llm_resp = response["model_response"].parts[0].content
-        await msg.edit_text(f'tg: Hello {update_info.username}\nllm: {llm_resp}')
-    except Exception as e:
-        logger.error("hello command error: ", exc_info=e)
-        logger.error(traceback.format_exc())
-        await msg.edit_text(f'tg: Hello {update_info.username}\nllm: <error>')
+    reply_text = await service.hello(update_info)
+    await msg.edit_text(reply_text)
 
 
 # TOPIC SETTINGS
@@ -98,11 +71,7 @@ async def show_models_command(update: Update, _context: ContextTypes.DEFAULT_TYP
 
     Отправляет inline клавиатуру с моделями.
     """
-    models = await service.llm_provider.get_models()
-    keyboard_models = [[InlineKeyboardButton(f"{model["display_name"]} | {model["name"]}", callback_data=f"change_model+{model["name"]}")]
-                       for model in models]
-    keyboard = keyboard_models + [[InlineKeyboardButton("Отмена", callback_data="cancel+0")]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    reply_markup = await service.get_models_keyboard()
     await update.message.reply_text("Выберите модель:", reply_markup=reply_markup)
 
 
@@ -114,12 +83,11 @@ async def button_change_model(update: Update, _context: ContextTypes.DEFAULT_TYP
     Изменяет модель для чата/топика.
     """
     update_info = await get_update_info(update)
-
     query = update.callback_query
     await query.answer()
-    model = query.data.split("+")[1]
-    await service.chat_manager.change_model(update_info.chat_id, update_info.topic_id, model)
-    await query.edit_message_text(text=f"Выбрана модель: {model}")
+    model_name = query.data.split("+")[1]
+    await service.change_model(update_info, model_name)
+    await query.edit_message_text(text=f"Выбрана модель: {model_name}")
 
 
 @log_decorator
@@ -130,13 +98,8 @@ async def system_prompt_change_command(update: Update, _context: ContextTypes.DE
     Устанавливает ChatState для чата/топика равным ChatState.PROMPT.
     """
     update_info = await get_update_info(update)
-
-    state[get_state_key(update_info.chat_id, update_info.topic_id)] = ChatState.PROMPT
-    topic_settings = await service.chat_manager.get_topic_settings(update_info.chat_id, update_info.topic_id)
-    current_prompt = topic_settings["system_prompt"]
-    resp_text = ('Отправьте новый промпт, /cancel для отмены или /empty для сброса промпта.\n'
-                 f'Текущий промпт: {service.chat_manager.format_system_prompt(current_prompt)}')
-    await send_msg_as_md(update, resp_text, "Markdown")
+    resp_text = await service.prompt_command(update_info)
+    await send_msg_as_md(update, resp_text, ParseMode.MARKDOWN)
 
 
 @log_decorator
@@ -147,14 +110,8 @@ async def temperature_change_command(update: Update, _context: ContextTypes.DEFA
     Устанавливает ChatState для чата/топика равным ChatState.TEMPERATURE.
     """
     update_info = await get_update_info(update)
-
-    state[get_state_key(update_info.chat_id, update_info.topic_id)] = ChatState.TEMPERATURE
-    topic_settings = await service.chat_manager.get_topic_settings(update_info.chat_id, update_info.topic_id)
-    await update.message.reply_text(
-        'Отправьте значение температуры (креативность/непредсказуемость модели), /cancel для отмены или /empty для сброса.\n'
-        f'Текущая температура: {topic_settings["temperature"]}\n'
-        f'Температура по-умолчанию: {settings.default_temperature}'
-    )
+    reply_text = await service.temperature_command(update_info)
+    await send_msg_as_md(update, reply_text, ParseMode.MARKDOWN)
 
 
 @log_decorator
@@ -169,7 +126,7 @@ async def clear_context_command(update: Update, _context: ContextTypes.DEFAULT_T
     message = await service.get_topic_info_message(update_info.chat_id, update_info.topic_id, update_info.user_id, _context.bot, with_prompt=False)
     message += "\nКонтекст очищен."
     await service.chat_manager.clear_context(update_info.chat_id, update_info.topic_id)
-    await send_msg_as_md(update, message, "Markdown")
+    await send_msg_as_md(update, message, ParseMode.MARKDOWN)
 
 
 # COMMON
@@ -236,7 +193,7 @@ async def user_info_command(update: Update, _context: ContextTypes.DEFAULT_TYPE)
     """
     user_id = update.effective_user.id
     message = await service.get_user_info_message(user_id, _context.bot)
-    await send_msg_as_md(update, message, "Markdown")
+    await send_msg_as_md(update, message, ParseMode.MARKDOWN)
 
 
 @log_decorator
@@ -260,7 +217,7 @@ async def topic_info_command(update: Update, _context: ContextTypes.DEFAULT_TYPE
     update_info = await get_update_info(update)
 
     message = await service.get_topic_info_message(update_info.chat_id, update_info.topic_id, update_info.user_id, _context.bot)
-    await send_msg_as_md(update, message, "Markdown")
+    await send_msg_as_md(update, message, ParseMode.MARKDOWN)
 
 
 # ADMIN
@@ -295,7 +252,7 @@ async def admin_users_command(update: Update, _context: ContextTypes.DEFAULT_TYP
     user_info = await service.chat_manager.get_user_info(user_id)
     if user_info["is_admin"]:
         message = await service.get_users(_context.bot)
-        await send_msg_as_md(update, message, "Markdown")
+        await send_msg_as_md(update, message, ParseMode.MARKDOWN)
 
 
 # TEXT
@@ -305,31 +262,9 @@ async def text_message_handler(update: Update, _context: ContextTypes.DEFAULT_TY
     Хэндлер для всех текстовых сообщений.
     """
     update_info = await get_update_info(update)
-    state_key = get_state_key(update_info.chat_id, update_info.topic_id)
-    queue_key = get_queue_key(update_info.user_id, update_info.topic_id)
-    topic_settings = await service.chat_manager.get_topic_settings(update_info.chat_id, update_info.topic_id)
-
-    msg = await update.message.reply_text("Пишет...")
-
-    if state.get(state_key) == ChatState.PROMPT:
-        await service.chat_manager.set_system_prompt(update_info.msg_text, update_info.chat_id, update_info.topic_id)
-        del state[state_key]
-        await msg.edit_text("Промпт установлен.")
-        return
-    if state.get(state_key) == ChatState.TEMPERATURE:
-        await service.chat_manager.set_temperature(update_info.msg_text, update_info.chat_id, update_info.topic_id)
-        del state[state_key]
-        await msg.edit_text("Температура установлена.")
-        return
-    else:
-        messages_queue[queue_key].append(update_info.msg_text)
-        _context.job_queue.run_once(
-            callback=delay_send,
-            when=0,
-            user_id=update_info.user_id,
-            chat_id=update_info.chat_id,
-            data={"update": update, "msg": msg, "topic_id": update_info.topic_id, "md_v2_mode": topic_settings.get("md_v2_mode", False)}
-        )
+    reply_text = await service.new_text_message(update_info, update, _context)
+    if reply_text is not None:
+        await update.message.reply_text(reply_text)
 
 
 # CHAT MEMBER HANDLER
@@ -367,7 +302,6 @@ async def ensure_user(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> No
     При любом сообщении проверяет, есть ли пользователь в базе. Создаёт пользователя, чат и топик для ЛС.
     """
     update_info = await get_update_info(update)
-
     await service.chat_manager.get_or_create_user(update_info.user_id, update_info.username, update_info.full_name)
 
 

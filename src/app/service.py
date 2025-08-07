@@ -1,8 +1,9 @@
 import asyncio
-import re
+import traceback
 from datetime import datetime, UTC
 
-from telegram import Bot, Update
+from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
 from src.app.chat_manager import ChatManager
@@ -11,7 +12,10 @@ from src.app.llm_provider import AnthropicLlmProvider, AbstractLlmProvider
 from src.app.message_repo import MessageRepository
 from src.config import settings
 from src.models import MessageModel, LlmProviderSendResponse
+from src.tools.chat_state import get_state_key, state, ChatState
 from src.tools.log import get_logger
+from src.tools.message_queue import messages_queue, get_queue_key, send_msg_as_md
+from src.tools.update_getters import UpdateInfo
 
 logger = get_logger(__name__)
 
@@ -27,47 +31,35 @@ class MessageProcessingFacade:
         self.chat_manager: ChatManager = chat_manager
         self.message_repo: MessageRepository = message_repo
 
-    async def process_invite(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Обработка ссылки-приглашения"""
-        topic_invite_pattern = re.compile(r'https?://t.me/\w+/(\d+)/(\d+)')
-        match = re.search(topic_invite_pattern, update.message.text)
-        try:
-            chat_id = int(match.group(1))
-            chat_id_minus = -1000000000000 - chat_id
-            chat_id = min(chat_id, chat_id_minus)
-            topic_id = int(match.group(2))
-            user_id = update.effective_user.id
-            topics = await self.chat_manager.get_allowed_topics(chat_id, user_id)
-            if topic_id == 1:
-                topic_id_send = 0
-            else:
-                topic_id_send = topic_id
-            try:
-                if topic_id in topics:
-                    msg = await context.bot.send_message(
-                        chat_id=chat_id,
-                        text="Ping. Проверка что бот может писать в этот топик.",
-                        message_thread_id=topic_id_send,
-                    )
-                    await update.message.reply_text(f"Бот и так добавлен в топик.")
-                    await asyncio.sleep(30)
-                    await msg.delete()
-                    return
-                await self.chat_manager.get_or_create_topic_info(chat_id, topic_id)
-                await self.chat_manager.add_allowed_topic(chat_id, topic_id, user_id)
-                await context.bot.send_message(chat_id, "Бот добавлен в этот чат.", message_thread_id=topic_id_send)
-                await update.message.reply_text(f"Бот добавлен в этот топик.")
-                logger.info(f"Добавлен новый топик: {topic_id} ({update.effective_user.full_name})")
-            except Exception as e:
-                await update.message.reply_text(
-                    f"Не удалось получить доступ к топику: {str(e)}, скорее всего боту не дали админку в группе.")
-                logger.error(f"Ошибка при получении доступа к топику: {str(e)}")
-        except Exception as e:
-            await update.message.reply_text(f"Что-то пошло не так :(")
-            logger.error(f"Ошибка при обработке ссылки: {str(e)}")
+    async def new_text_message(self, update_info: UpdateInfo, update: Update, context: ContextTypes.DEFAULT_TYPE) -> str | None:
+        state_key = get_state_key(update_info.chat_id, update_info.topic_id)
+        queue_key = get_queue_key(update_info.user_id, update_info.topic_id)
 
+        if state.get(state_key) == ChatState.PROMPT:
+            reply_text = await self.prompt_command(update_info)
+            return reply_text
+        if state.get(state_key) == ChatState.TEMPERATURE:
+            reply_text = await self.temperature_command(update_info)
+            return reply_text
+        else:
+            messages_queue[queue_key].append(update_info.msg_text)
+            context.job_queue.run_once(
+                callback=self.delay_send,
+                when=0,
+                user_id=update_info.user_id,
+                chat_id=update_info.chat_id,
+                data={"update": update, "update_info": update_info}
+            )
+            return None
 
-    async def send_messages(self, messages: list[MessageModel], user_id: int, chat_id: int, topic_id: int, cache: bool = None) -> LlmProviderSendResponse:
+    async def send_messages(
+        self,
+        messages: list[MessageModel],
+        user_id: int,
+        chat_id: int,
+        topic_id: int,
+        cache: bool = None
+    ) -> LlmProviderSendResponse:
         if topic_id is None:
             topic_id = 1
         topic_info = await self.chat_manager.get_or_create_topic_info(chat_id, topic_id)
@@ -166,8 +158,10 @@ class MessageProcessingFacade:
             context_tokens = "<error>"
             logger.error(f"context was broken. {user_id=} {chat_id=} {topic_id=} {topic_settings["offset"]=}")
         allowed_topics = await self.chat_manager.get_allowed_topics(chat_id, user_id)
-        tokens_total_input = sum([mes["tokens_message"] + mes["tokens_from_prov"] for mes in messages_records if mes["message_param"]["role"] == "user"])
-        tokens_total_output = sum([mes["tokens_message"] + mes["tokens_from_prov"] for mes in messages_records if mes["message_param"]["role"] == "assistant"])
+        tokens_total_input = sum(
+            [mes["tokens_message"] + mes["tokens_from_prov"] for mes in messages_records if mes["message_param"]["role"] == "user"])
+        tokens_total_output = sum(
+            [mes["tokens_message"] + mes["tokens_from_prov"] for mes in messages_records if mes["message_param"]["role"] == "assistant"])
         if topic_id not in allowed_topics:
             can_reply = "Нет"
         else:
@@ -236,6 +230,128 @@ class MessageProcessingFacade:
     async def new_group(self, user_id: int, username: str, full_name: str, chat_id: int):
         await self.chat_manager.get_or_create_user(user_id, username, full_name)
         await self.chat_manager.get_or_create_chat_info(chat_id, user_id)
+
+    async def start(self, update_info: UpdateInfo) -> str:
+        await self.chat_manager.get_or_create_user(update_info.user_id, update_info.username, update_info.full_name)
+        allowed_topics = await self.chat_manager.get_allowed_topics(update_info.chat_id, update_info.user_id)
+        if update_info.topic_id in allowed_topics:
+            return "Бот уже тут."
+        else:
+            await self.chat_manager.add_allowed_topic(update_info.chat_id, update_info.topic_id, update_info.user_id)
+            return "Бот добавлен в чат."
+
+    async def stop(self, update_info: UpdateInfo) -> str:
+        res = await self.chat_manager.remove_allowed_topics(update_info.chat_id, update_info.topic_id, update_info.user_id)
+        if not res:
+            return "Не ожидалось этой команды."
+        return "Покинул топик. Чтобы добавить снова, отправьте ссылку-приглашение боту в лc.\nИли отправьте /start в этот чат."
+
+    async def hello(self, update_info: UpdateInfo) -> str:
+        try:
+            response = await self.llm_provider.ping()
+            llm_resp = response["model_response"].parts[0].content
+            return f'tg: Hello {update_info.username}\nllm: {llm_resp}'
+        except Exception as e:
+            logger.error("hello command error: ", exc_info=e)
+            logger.error(traceback.format_exc())
+            return f'tg: Hello {update_info.username}\nllm: <error>'
+
+    async def get_models_keyboard(self) -> InlineKeyboardMarkup:
+        models = await self.llm_provider.get_models()
+        keyboard_models = [
+            [InlineKeyboardButton(f"{model["display_name"]} | {model["name"]}", callback_data=f"change_model+{model["name"]}")]
+            for model in models
+        ]
+        keyboard = keyboard_models + [[InlineKeyboardButton("Отмена", callback_data="cancel+0")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        return reply_markup
+
+    async def change_model(self, update_info: UpdateInfo, model_name: str) -> None:
+        await self.chat_manager.change_model(update_info.chat_id, update_info.topic_id, model_name)
+
+    async def prompt_command(self, update_info: UpdateInfo) -> str:
+        state_key = get_state_key(update_info.chat_id, update_info.topic_id)
+        current_state = state.get(state_key, None)
+
+        if current_state == ChatState.PROMPT:
+            await self.chat_manager.set_system_prompt(update_info.msg_text, update_info.chat_id, update_info.topic_id)
+            del state[state_key]
+            return "Промпт установлен."
+        else:
+            state[get_state_key(update_info.chat_id, update_info.topic_id)] = ChatState.PROMPT
+            topic_settings = await self.chat_manager.get_topic_settings(update_info.chat_id, update_info.topic_id)
+            current_prompt = topic_settings["system_prompt"]
+            resp_text = ('Отправьте новый промпт, /cancel для отмены или /empty для сброса промпта.\n'
+                         f'Текущий промпт: {self.chat_manager.format_system_prompt(current_prompt)}')
+            return resp_text
+
+    async def temperature_command(self, update_info: UpdateInfo) -> str:
+        state_key = get_state_key(update_info.chat_id, update_info.topic_id)
+        current_state = state.get(state_key, None)
+
+        if current_state == ChatState.TEMPERATURE:
+            new_temp = update_info.msg_text
+            try:
+                new_temp = float(new_temp.replace(",", "."))
+                await self.chat_manager.set_temperature(new_temp, update_info.chat_id, update_info.topic_id)
+                del state[state_key]
+                return "Температура установлена."
+            except (ValueError, AttributeError):
+                return "Ошибка. Отправьте температуру числом. Например `0.6`."
+        else:
+            state[get_state_key(update_info.chat_id, update_info.topic_id)] = ChatState.TEMPERATURE
+            topic_settings = await self.chat_manager.get_topic_settings(update_info.chat_id, update_info.topic_id)
+            return ('Отправьте значение температуры (креативность/непредсказуемость модели), /cancel для отмены или /empty для сброса.\n'
+                    'Более низкие температуры приводят к более предсказуемым и целенаправленным реакциям, в то время как более высокие '
+                    'температуры привносят больше случайности и креативности.\n\n'
+                    f'Текущая температура: {topic_settings["temperature"]}\n'
+                    f'Температура по-умолчанию: {settings.default_temperature}')
+
+    async def delay_send(self, _context: ContextTypes.DEFAULT_TYPE) -> None:
+        """
+        Отложенная отправка сообщений. После первого сообщения в чате/топике ожидает 2 секунды новых сообщений в этот же чат.
+        Собирает сообщения в одно и отправляет в ллм.
+
+        Клиент телеграм разделяет большие сообщения при отправке на меньшие, из-за этого
+        в ллм отправляется обрезанная версия, а вслед вторая часть.
+
+
+        Examples:
+
+            .. code-block:: python
+
+                _context.job_queue.run_once(
+                    callback=_delay_send,
+                    when=0,
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    data={"update": update, "msg": msg, "topic_id": topic_id}
+                )
+
+            Ожидаемые данные:
+
+            .. code-block::
+
+                _context.job.user_id: int - id пользователя
+                _context.job.chat_id: int - id чата
+                _context.job.data["topic_id"]: int - id топика/темы чата
+                _context.job.data["msg"]: str - сообщение пользователя
+                _context.job.data["update"]: telegram.Update - объект обновления от tg с сообщением пользователя
+        """
+        update_info: UpdateInfo = _context.job.data["update_info"]
+
+        key = get_queue_key(update_info.user_id, update_info.topic_id)
+        await asyncio.sleep(2)
+        if not messages_queue[key]:
+            return
+        update = _context.job.data["update"]
+        topic_settings = await self.chat_manager.get_topic_settings(update_info.chat_id, update_info.topic_id)
+        md_v2_mode = topic_settings.get("md_mode", ParseMode.MARKDOWN)
+        message = "\n".join(messages_queue[key])
+        del messages_queue[key]
+        msg = await update.message.reply_text("Пишет...")
+        llm_resp_text = await self.process_txt_message(message, update_info.user_id, update_info.chat_id, update_info.topic_id)
+        await send_msg_as_md(update, llm_resp_text, md_v2_mode, msg)
 
 
 db_provider_instance = MongoManager(settings.mongo_url)

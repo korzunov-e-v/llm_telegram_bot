@@ -5,6 +5,7 @@ from anthropic.types import ModelParam
 from bson import ObjectId
 from pydantic_ai.messages import ModelResponse
 from pydantic_ai.usage import Usage
+from telegram.constants import ParseMode
 
 
 class Settings(TypedDict):
@@ -13,7 +14,7 @@ class Settings(TypedDict):
     system_prompt: Optional[str]
     temperature: float
     parse_pdf: Optional[bool]
-    md_v2_mode: Optional[bool]
+    md_mode: ParseMode
 
 
 class TopicInfo(TypedDict):

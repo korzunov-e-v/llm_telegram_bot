@@ -9,7 +9,7 @@ services:
       llm_telegram_bot-bot
     restart: unless-stopped
     env_file:
-      - .env.dev
+      - .env
     volumes:
       - ./src:/srv/src
 

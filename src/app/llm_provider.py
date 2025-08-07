@@ -40,6 +40,10 @@ class AbstractLlmProvider(ABC):
     async def get_models(self) -> list[AvailableModel]:
         raise NotImplementedError()
 
+    @abstractmethod
+    async def ping(self, model: str | None = None) -> LlmProviderSendResponse:
+        raise NotImplementedError()
+
 
 class BaseLlmProvider(AbstractLlmProvider):
     def __init__(self, api_key: str, base_url: str, model_class: Type[OpenAIModel] | Type[AnthropicModel]):
@@ -49,6 +53,9 @@ class BaseLlmProvider(AbstractLlmProvider):
 
     @abstractmethod
     def _get_ai_instance(self, model: str) -> Model:
+        raise NotImplementedError()
+
+    def _get_default_model_name(self) -> str:
         raise NotImplementedError()
 
     async def send_messages(
@@ -95,6 +102,16 @@ class BaseLlmProvider(AbstractLlmProvider):
     async def get_models(self) -> list[AvailableModel]:
         raise NotImplementedError()
 
+    async def ping(self, model: str | None = None) -> LlmProviderSendResponse:
+        res = await self.send_messages(
+            model=self._get_default_model_name(),
+            messages=[MessageModel(content="На связи?", role="user")],
+            temp=1,
+            max_tokens=10,
+            user_id=0
+        )
+        return res
+
 
 class AnthropicLlmProvider(BaseLlmProvider):
     def __init__(self, api_key: str, base_url: str = None):
@@ -113,6 +130,9 @@ class AnthropicLlmProvider(BaseLlmProvider):
                 )
             )
         )
+
+    def _get_default_model_name(self) -> str:
+        return "claude-3-5-haiku-latest"
 
     async def count_tokens(self, model: str, messages: list[MessageModel]) -> int:
         if len(messages) == 0:
@@ -139,6 +159,9 @@ class OpenAiLlmProvider(BaseLlmProvider):
     # noinspection PyTypeChecker
     def _get_ai_instance(self, model: str) -> OpenAIModel:
         return OpenAIModel(model_name=model, provider=OpenAIProvider(base_url=self._base_url, api_key=self._api_key))
+
+    def _get_default_model_name(self) -> str:
+        return "openai/gpt-4.1-nano"
 
     async def count_tokens(self, model: str, messages: list[MessageModel]) -> int:
         enc = tiktoken.encoding_for_model(model)
