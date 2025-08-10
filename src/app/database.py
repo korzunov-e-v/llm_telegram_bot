@@ -22,8 +22,7 @@ class MongoManager:
         assert isinstance(chat_id, int)
         assert isinstance(topic_id, int)
         assert isinstance(offset, int)
-        if sort:
-            assert isinstance(sort, dict)
+        assert isinstance(sort, dict | None)
         collection_name = self.__get_mes_col_name(chat_id, topic_id)
         if sort is None:
             sort = {"timestamp": 1}

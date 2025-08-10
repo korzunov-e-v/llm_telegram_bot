@@ -1,6 +1,6 @@
 import asyncio
 import traceback
-from datetime import datetime, UTC
+from datetime import datetime, UTC, timedelta
 
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
@@ -34,27 +34,40 @@ class MessageProcessingFacade:
     async def new_text_message(self, update_info: UpdateInfo, update: Update, context: ContextTypes.DEFAULT_TYPE) -> str | None:
         state_key = get_state_key(update_info.chat_id, update_info.topic_id)
         queue_key = get_queue_key(update_info.user_id, update_info.topic_id)
+        messages_queue[queue_key].append((update_info.msg_text, datetime.now()))
 
-        if state.get(state_key) == ChatState.PROMPT:
-            reply_text = await self.prompt_command(update_info)
-            return reply_text
-        if state.get(state_key) == ChatState.TEMPERATURE:
-            reply_text = await self.temperature_command(update_info)
-            return reply_text
-        else:
-            messages_queue[queue_key].append(update_info.msg_text)
-            context.job_queue.run_once(
-                callback=self.delay_send,
-                when=0,
-                user_id=update_info.user_id,
-                chat_id=update_info.chat_id,
-                data={"update": update, "update_info": update_info}
-            )
-            return None
+        if len(messages_queue[queue_key]) == 1:
+            if state.get(state_key) == ChatState.PROMPT:
+                reply_text = await self.delay_prompt(update_info)
+                return reply_text
+            if state.get(state_key) == ChatState.TEMPERATURE:
+                reply_text = await self.temperature_command(update_info)
+                return reply_text
+            else:
+                context.job_queue.run_once(
+                    callback=self.delay_send,
+                    when=0,
+                    user_id=update_info.user_id,
+                    chat_id=update_info.chat_id,
+                    data={"update": update, "update_info": update_info}
+                )
+        return None
 
-    async def send_messages(
+    async def send_message(
         self,
-        messages: list[MessageModel],
+        message_text: str,
+        user_id: int,
+        chat_id: int,
+        topic_id: int,
+        cache: bool = None
+    ) -> str:
+        llm_resp = await self._send_message(message_text, user_id, chat_id, topic_id, cache)
+        llm_resp_text = self.get_llm_resp_str(llm_resp)
+        return llm_resp_text
+
+    async def _send_message(
+        self,
+        message_text: str,
         user_id: int,
         chat_id: int,
         topic_id: int,
@@ -65,15 +78,11 @@ class MessageProcessingFacade:
         topic_info = await self.chat_manager.get_or_create_topic_info(chat_id, topic_id)
         topic_settings = topic_info["settings"]
         context = await self.chat_manager.get_context(chat_id, topic_id, topic_settings["offset"])
-
-        user_messages = []
-        for i in messages[::-1]:
-            if i["role"] == "user":
-                user_messages.append(i)
-            else:
-                break
-        user_messages = user_messages[::-1]
-        input_sing_tokens_count = [await self.llm_provider.count_tokens(topic_settings["model"], [mes]) for mes in user_messages]
+        user_message = MessageModel(
+            content=message_text,
+            role="user",
+        )
+        messages = context + [user_message]
 
         u_dt = datetime.now(UTC)
         response = await self.llm_provider.send_messages(
@@ -86,6 +95,7 @@ class MessageProcessingFacade:
         )
 
         a_dt = datetime.now(UTC)
+        input_sing_tokens_count = await self.llm_provider.count_tokens(topic_settings["model"], messages)
         llm_message = MessageModel(
             content=response["model_response"].parts[0].content,
             role="assistant",
@@ -102,37 +112,22 @@ class MessageProcessingFacade:
             tokens_from_prov=response["usage"].response_tokens,
             timestamp=a_dt,
         )
-        for i, mes in enumerate(user_messages):
-            await self.message_repo.add_message_to_db(  # user
-                chat_id=chat_id,
-                topic_id=topic_id,
-                user_id=user_id,
-                message=mes,
-                context_n=len(context),
-                model=response["model_response"].model_name,
-                tokens_message=input_sing_tokens_count[i],
-                tokens_from_prov=response["usage"].request_tokens,
-                timestamp=u_dt,
-            )
-
+        await self.message_repo.add_message_to_db(  # user
+            chat_id=chat_id,
+            topic_id=topic_id,
+            user_id=user_id,
+            message=user_message,
+            context_n=len(context),
+            model=response["model_response"].model_name,
+            tokens_message=input_sing_tokens_count,
+            tokens_from_prov=response["usage"].request_tokens,
+            timestamp=u_dt,
+        )
         return response
 
-    async def process_txt_message(self, message_text: str, user_id: int, chat_id: int, topic_id: int) -> str:
-        if topic_id is None:
-            topic_id = 1
-        topic_info = await self.chat_manager.get_or_create_topic_info(chat_id, topic_id)
-        topic_settings = topic_info["settings"]
-        context = await self.chat_manager.get_context(chat_id, topic_id, topic_settings["offset"])
-
-        user_message = MessageModel(
-            content=message_text,
-            role="user",
-        )
-        messages = context + [user_message]
-
-        llm_resp = await self.send_messages(messages, user_id, chat_id, topic_id)
-        llm_resp_text = llm_resp["model_response"].parts[0].content
-        return llm_resp_text
+    @staticmethod
+    def get_llm_resp_str(llm_resp: LlmProviderSendResponse) -> str:
+        return llm_resp["model_response"].parts[0].content
 
     async def get_topic_info_message(self, chat_id: int, topic_id: int, user_id: int, bot: Bot, with_prompt: bool = True) -> str:
         if topic_id is None:
@@ -270,20 +265,12 @@ class MessageProcessingFacade:
         await self.chat_manager.change_model(update_info.chat_id, update_info.topic_id, model_name)
 
     async def prompt_command(self, update_info: UpdateInfo) -> str:
-        state_key = get_state_key(update_info.chat_id, update_info.topic_id)
-        current_state = state.get(state_key, None)
-
-        if current_state == ChatState.PROMPT:
-            await self.chat_manager.set_system_prompt(update_info.msg_text, update_info.chat_id, update_info.topic_id)
-            del state[state_key]
-            return "Промпт установлен."
-        else:
-            state[get_state_key(update_info.chat_id, update_info.topic_id)] = ChatState.PROMPT
-            topic_settings = await self.chat_manager.get_topic_settings(update_info.chat_id, update_info.topic_id)
-            current_prompt = topic_settings["system_prompt"]
-            resp_text = ('Отправьте новый промпт, /cancel для отмены или /empty для сброса промпта.\n'
-                         f'Текущий промпт: {self.chat_manager.format_system_prompt(current_prompt)}')
-            return resp_text
+        state[get_state_key(update_info.chat_id, update_info.topic_id)] = ChatState.PROMPT
+        topic_settings = await self.chat_manager.get_topic_settings(update_info.chat_id, update_info.topic_id)
+        current_prompt = topic_settings["system_prompt"]
+        resp_text = ('Отправьте новый промпт, /cancel для отмены или /empty для сброса промпта.\n'
+                     f'Текущий промпт: {self.chat_manager.format_system_prompt(current_prompt)}')
+        return resp_text
 
     async def temperature_command(self, update_info: UpdateInfo) -> str:
         state_key = get_state_key(update_info.chat_id, update_info.topic_id)
@@ -338,20 +325,38 @@ class MessageProcessingFacade:
                 _context.job.data["msg"]: str - сообщение пользователя
                 _context.job.data["update"]: telegram.Update - объект обновления от tg с сообщением пользователя
         """
-        update_info: UpdateInfo = _context.job.data["update_info"]
-
-        key = get_queue_key(update_info.user_id, update_info.topic_id)
-        await asyncio.sleep(2)
-        if not messages_queue[key]:
-            return
         update = _context.job.data["update"]
+        msg = await update.message.reply_text("Пишет...")
+
+        update_info: UpdateInfo = _context.job.data["update_info"]
+        queue_key = get_queue_key(update_info.user_id, update_info.topic_id)
         topic_settings = await self.chat_manager.get_topic_settings(update_info.chat_id, update_info.topic_id)
         md_v2_mode = topic_settings.get("md_mode", ParseMode.MARKDOWN)
-        message = "\n".join(messages_queue[key])
-        del messages_queue[key]
-        msg = await update.message.reply_text("Пишет...")
-        llm_resp_text = await self.process_txt_message(message, update_info.user_id, update_info.chat_id, update_info.topic_id)
+
+        messages = await self.wait_messages(queue_key)
+        message = "\n".join(messages)
+
+        llm_resp_text = await self.send_message(message, update_info.user_id, update_info.chat_id, update_info.topic_id)
         await send_msg_as_md(update, llm_resp_text, md_v2_mode, msg)
+
+    async def delay_prompt(self, update_info: UpdateInfo) -> str:
+        queue_key = get_queue_key(update_info.user_id, update_info.topic_id)
+        state_key = get_state_key(update_info.chat_id, update_info.topic_id)
+
+        messages = await self.wait_messages(queue_key)
+        message = "\n".join(messages)
+
+        await self.chat_manager.set_system_prompt(message, update_info.chat_id, update_info.topic_id)
+        del state[state_key]
+        return "Промпт установлен."
+
+    @staticmethod
+    async def wait_messages(queue_key: str, delay_seconds: int = 5) ->  list[str]:
+        while datetime.now() - messages_queue[queue_key][-1][1] < timedelta(seconds=delay_seconds):
+            await asyncio.sleep(0.3)
+        messages = messages_queue[queue_key]
+        del messages_queue[queue_key]
+        return [mes[0] for mes in messages]
 
 
 db_provider_instance = MongoManager(settings.mongo_url)

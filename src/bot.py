@@ -323,7 +323,7 @@ def build_app(bot_token: str) -> Application:
     """
     topic_filter = TopicFilter()
 
-    app = ApplicationBuilder().token(bot_token).build()
+    app = ApplicationBuilder().concurrent_updates(True).token(bot_token).build()
     app.add_handler(ChatMemberHandler(track_chats_handler, ChatMemberHandler.MY_CHAT_MEMBER))
     app.add_handler(MessageHandler(filters=filters.ALL, callback=ensure_user), group=100)
     app.add_handler(CommandHandler("start", start_command))
@@ -342,5 +342,5 @@ def build_app(bot_token: str) -> Application:
     app.add_handler(CommandHandler("i_am_admin", i_am_admin_command))
     app.add_handler(CallbackQueryHandler(button_change_model, pattern="change_model"))
     app.add_handler(CallbackQueryHandler(button_cancel, pattern="cancel"))
-    app.add_handler(MessageHandler(filters=filters.TEXT & ~filters.COMMAND & topic_filter, callback=text_message_handler))
+    app.add_handler(MessageHandler(filters=filters.TEXT & ~filters.COMMAND & topic_filter, callback=text_message_handler, block=False))
     return app

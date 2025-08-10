@@ -1,3 +1,4 @@
+import datetime
 import traceback
 from collections import defaultdict
 
@@ -19,13 +20,14 @@ def get_queue_key(user_id: int, topic_id: int) -> str:
 
     :param user_id: id пользователя в tg
     :param topic_id: id топика/темы в чате в tg
-    :return: строка `f"{user_id}+{topic_id}"`
+    :return: строка `f"user_{user_id}+topic_{topic_id}"`
     """
     return f"user_{user_id}+topic_{topic_id}"
 
 
-messages_queue: dict[str, list[str]] = defaultdict(list)  # {f"{user_id}+{topic_id}": ["message_text", "continue_message_text"]}
+messages_queue: dict[str, list[tuple[str, datetime.datetime]]] = defaultdict(list)
 """Очередь сообщений по пользователю и топику."""
+# {f"user_{user_id}+topic_{topic_id}": [("message_text", datetime.now), ("continue_message_text", datetime.now)]}
 
 
 @log_decorator
