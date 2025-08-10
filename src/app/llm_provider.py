@@ -70,15 +70,15 @@ class BaseLlmProvider(AbstractLlmProvider):
     ) -> LlmProviderSendResponse:
         ai_model = self._get_ai_instance(model=model)
 
-        grouped_messages: list[list[MessageModel]] = [list(group) for key, group in groupby(messages, lambda x: x["role"])]
+        grouped_messages: list[list[MessageModel]] = [list(group) for key, group in groupby(messages, lambda x: x.role)]
 
         messages_to_send: List[ModelMessage] = []
         for group in grouped_messages:
-            if group[0]["role"] == "user":
-                parts = [UserPromptPart(content=m["content"]) for m in group]
+            if group[0].role == "user":
+                parts = [UserPromptPart(content=m.content) for m in group]
                 messages_to_send.append(ModelRequest(parts=parts))
             else:
-                parts = [TextPart(content=m["content"], part_kind="text") for m in group]
+                parts = [TextPart(content=m.content, part_kind="text") for m in group]
                 messages_to_send.append(ModelResponse(parts=parts, kind="response"))
 
         if system_prompt:
@@ -116,7 +116,6 @@ class BaseLlmProvider(AbstractLlmProvider):
 class AnthropicLlmProvider(BaseLlmProvider):
     def __init__(self, api_key: str, base_url: str = None):
         model_class = AnthropicModel
-        # base_url = "https://api.anthropic.com/v1"
         super().__init__(api_key, base_url, model_class)
         self.extra_headers_cache = {"anthropic-beta": "prompt-caching-2024-07-31"}
 
@@ -138,7 +137,7 @@ class AnthropicLlmProvider(BaseLlmProvider):
         if len(messages) == 0:
             return 0
         ai_model = self._get_ai_instance(model)
-        message_to_send = [MessageParam(content=mes["content"], role=mes["role"]) for mes in messages]
+        message_to_send = [MessageParam(content=mes.content, role=mes.role) for mes in messages]
         res = await ai_model.client.messages.count_tokens(
             messages=message_to_send,
             model=model
@@ -165,7 +164,7 @@ class OpenAiLlmProvider(BaseLlmProvider):
 
     async def count_tokens(self, model: str, messages: list[MessageModel]) -> int:
         enc = tiktoken.encoding_for_model(model)
-        enc_res = enc.encode_batch([mes["content"] for mes in messages])
+        enc_res = enc.encode_batch([mes.content for mes in messages])
         return sum(map(len, enc_res))
 
     async def get_models(self) -> list[AvailableModel]:

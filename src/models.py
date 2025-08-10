@@ -1,53 +1,60 @@
 import datetime
-from typing import TypedDict, NotRequired, Optional, Literal
+from typing import Optional, Literal
 
 from anthropic.types import ModelParam
 from bson import ObjectId
+from pydantic import BaseModel, Field
 from pydantic_ai.messages import ModelResponse
 from pydantic_ai.usage import Usage
 from telegram.constants import ParseMode
 
-
-class Settings(TypedDict):
-    offset: int
-    model: str
-    system_prompt: Optional[str]
-    temperature: float
-    parse_pdf: Optional[bool]
-    md_mode: ParseMode
+from src.config import settings
 
 
-class TopicInfo(TypedDict):
-    _id: NotRequired[ObjectId]
+class BaseMongoModel(BaseModel):
+    id: ObjectId = Field(None, alias="_id", exclude=True)
+
+    class Config:
+        validate_by_name = True
+        arbitrary_types_allowed = True
+
+
+class Settings(BaseModel):
+    offset: int = Field(0)
+    model: str = Field(settings.default_model)
+    system_prompt: Optional[str] = Field(None)
+    temperature: float = Field(0.7)
+    parse_pdf: Optional[bool] = Field(False)
+    md_mode: ParseMode = Field(ParseMode.MARKDOWN)
+
+
+class TopicInfo(BaseMongoModel):
     chat_id: int
     topic_id: int
     settings: Settings
 
 
-class ChatInfo(TypedDict):
-    _id: NotRequired[ObjectId]
+class ChatInfo(BaseMongoModel):
     chat_id: int
     owner_user_id: int
-    allowed_topics: dict
+    allowed_topics: dict = Field(dict())
 
 
-class UserInfo(TypedDict):
-    _id: NotRequired[ObjectId]
+class UserInfo(BaseMongoModel):
     user_id: int
     username: str
     full_name: str
-    tokens_balance: int
-    is_admin: NotRequired[bool]
-    dt_created: NotRequired[datetime.datetime]
+    tokens_balance: int = Field(0)
+    is_admin: bool = Field(False)
+    dt_created: datetime.datetime = Field(datetime.datetime.now(datetime.UTC))
 
 
-class MessageModel(TypedDict):
+class MessageModel(BaseModel):
     content: str
     role: Literal["assistant", "user"]
 
 
-class MessageRecord(TypedDict):
-    _id: NotRequired[ObjectId]
+class MessageRecord(BaseMongoModel):
     message_param: MessageModel
     context_n: int
     model: ModelParam
@@ -57,11 +64,11 @@ class MessageRecord(TypedDict):
     timestamp: datetime.datetime
 
 
-class LlmProviderSendResponse(TypedDict):
+class LlmProviderSendResponse(BaseModel):
     model_response: ModelResponse
     usage: Usage
 
 
-class AvailableModel(TypedDict):
+class AvailableModel(BaseModel):
     display_name: str
     name: str

@@ -46,12 +46,12 @@ async def stop_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> N
     Запрещает боту отправлять сообщения в этот чат/топик.
     """
     update_info = await get_update_info(update)
-    reply_text = await service.start(update_info)
+    reply_text = await service.stop(update_info)
     await update.message.reply_text(reply_text)
 
 
 @log_decorator
-async def hello_command(update: Update, _context: ContextTypes.DEFAULT_TYPE):
+async def hello_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Команда проверки связи для бота.
 
@@ -65,7 +65,7 @@ async def hello_command(update: Update, _context: ContextTypes.DEFAULT_TYPE):
 
 # TOPIC SETTINGS
 @log_decorator
-async def show_models_command(update: Update, _context: ContextTypes.DEFAULT_TYPE):
+async def show_models_command(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Команда смены модели для чата/топика.
 
@@ -122,8 +122,14 @@ async def clear_context_command(update: Update, _context: ContextTypes.DEFAULT_T
     Устанавливает offset для чата/топика равным количеству сообщений.
     """
     update_info = await get_update_info(update)
-
-    message = await service.get_topic_info_message(update_info.chat_id, update_info.topic_id, update_info.user_id, _context.bot, with_prompt=False)
+    chat = await _context.bot.get_chat(update_info.chat_id)
+    chat_name = chat.title if chat.title else chat.username
+    message = await service.get_topic_info_message(
+        chat_id=update_info.chat_id,
+        topic_id=update_info.topic_id,
+        user_id=update_info.user_id,
+        chat_name=chat_name,
+    )
     message += "\nКонтекст очищен."
     await service.chat_manager.clear_context(update_info.chat_id, update_info.topic_id)
     await send_msg_as_md(update, message, ParseMode.MARKDOWN)
@@ -169,7 +175,7 @@ async def button_cancel(update: Update, _context: ContextTypes.DEFAULT_TYPE) -> 
     query = update.callback_query
     await query.answer()
     await query.edit_message_reply_markup(None)
-    await query.edit_message_text(text=f"Отменено.")
+    await query.edit_message_text(text="Отменено.")
 
 
 # INFO
@@ -215,8 +221,14 @@ async def topic_info_command(update: Update, _context: ContextTypes.DEFAULT_TYPE
             Бот может отвечать в этом чате: Да
     """
     update_info = await get_update_info(update)
-
-    message = await service.get_topic_info_message(update_info.chat_id, update_info.topic_id, update_info.user_id, _context.bot)
+    chat = await _context.bot.get_chat(update_info.chat_id)
+    chat_name = chat.title if chat.title else chat.username
+    message = await service.get_topic_info_message(
+        chat_id=update_info.chat_id,
+        topic_id=update_info.topic_id,
+        user_id=update_info.user_id,
+        chat_name=chat_name,
+    )
     await send_msg_as_md(update, message, ParseMode.MARKDOWN)
 
 
@@ -233,7 +245,7 @@ async def i_am_admin_command(update: Update, _context: ContextTypes.DEFAULT_TYPE
         token = _context.args[0]
         if token == settings.admin_token:
             user = await service.chat_manager.get_user_info(user_id)
-            user["is_admin"] = True
+            user.is_admin = True
             await service.chat_manager.update_user(user)
             await update.effective_message.reply_text("Token accepted.")
             return
@@ -250,7 +262,7 @@ async def admin_users_command(update: Update, _context: ContextTypes.DEFAULT_TYP
     """
     user_id = update.effective_user.id
     user_info = await service.chat_manager.get_user_info(user_id)
-    if user_info["is_admin"]:
+    if user_info.is_admin:
         message = await service.get_users(_context.bot)
         await send_msg_as_md(update, message, ParseMode.MARKDOWN)
 
