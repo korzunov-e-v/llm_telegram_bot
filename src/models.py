@@ -68,6 +68,11 @@ class MessageRecord(BaseMongoModel):
     timestamp: datetime
 
 
+class PromptModel(BaseModel):
+    prompt: str
+    timestamp: datetime = datetime.now(UTC)
+
+
 class LlmProviderSendResponse(BaseModel):
     model_response: ModelResponse
     usage: Usage

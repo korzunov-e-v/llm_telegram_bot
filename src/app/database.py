@@ -2,7 +2,7 @@ import datetime
 
 from pymongo import MongoClient
 
-from src.models import MessageRecord, UserInfo, ChatInfo, TopicInfo
+from src.models import MessageRecord, UserInfo, ChatInfo, TopicInfo, PromptModel
 from src.tools.log import get_logger
 
 
@@ -13,6 +13,7 @@ class MongoManager:
         self.users_db = self._client.get_database("users")
         self.topics_db = self._client.get_database("topics")
         self.messages_db = self._client.get_database("messages")
+        self.prompts_db = self._client.get_database("prompt_history")
         self.user_info_collection = self.users_db.get_collection("user_infos")
         self.chat_info_collection = self.users_db.get_collection("chat_infos")
         self.logger.info(f"users in db: {self.user_info_collection.count_documents({})}")
@@ -160,6 +161,18 @@ class MongoManager:
         assert isinstance(chat_id, int)
         col = self.topics_db.get_collection(str(chat_id))
         col.replace_one({"_id": topic_info.id}, topic_info.model_dump())
+
+    # PROMPTS
+    async def add_prompt(self, prompt: str, chat_id: int, topic_id: int) -> None:
+        assert isinstance(prompt, str)
+        assert isinstance(chat_id, int)
+        assert isinstance(topic_id, int)
+        col = self.prompts_db.get_collection(self.__get_prompt_col_name(chat_id, topic_id))
+        col.insert_one(PromptModel(prompt=prompt).model_dump())
+
+    @staticmethod
+    def __get_prompt_col_name(chat_id: int, topic_id: int) -> str:
+        return f"{chat_id}+{topic_id}"
 
     @staticmethod
     def __get_mes_col_name(chat_id: int, topic_id: int) -> str:

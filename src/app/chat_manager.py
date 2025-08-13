@@ -158,6 +158,8 @@ class ChatManager:
     # PROMPT
     async def set_system_prompt(self, prompt: str | None, chat_id: int, topic_id: int) -> None:
         topic_info = await self.get_or_create_topic_info(chat_id, topic_id)
+        old_prompt = topic_info.settings.system_prompt
+        await self._db_provider.add_prompt(old_prompt, chat_id, topic_id)
         topic_info.settings.system_prompt = prompt
         await self.update_topic_info(topic_info)
 
