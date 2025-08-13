@@ -19,7 +19,8 @@ from src.models import PTBContext
 from src.tools.chat_state import get_state_key, state, ChatState
 from src.tools.exceptions import error_handler
 from src.tools.log import get_logger, log_decorator
-from src.tools.message_queue import send_msg_as_md
+from src.tools.message_queue import send_reply_as_md
+from src.tools.tracekit import install_tracekit, TraceKitConfig
 from src.tools.update_getters import get_update_info, extract_status_change
 
 logger = get_logger(__name__)
@@ -145,7 +146,7 @@ async def system_prompt_change_command(update: Update, _context: PTBContext) -> 
     """
     update_info = await get_update_info(update)
     resp_text = await service.prompt_command(update_info)
-    await send_msg_as_md(update, resp_text, ParseMode.MARKDOWN)
+    await send_reply_as_md(update, resp_text, ParseMode.MARKDOWN)
 
 
 @log_decorator
@@ -322,7 +323,7 @@ async def text_message_handler(update: Update, _context: PTBContext) -> None:
     update_info = await get_update_info(update)
     reply_text = await service.new_text_message(update_info, update)
     if reply_text is not None:
-        await update.message.reply_text(reply_text, parse_mode=ParseMode.MARKDOWN)
+        await send_reply_as_md(update, reply_text, parse_mode=ParseMode.MARKDOWN_V2)
 
 
 # CHAT MEMBER HANDLER
@@ -387,6 +388,18 @@ def build_app(bot_token: str) -> Application:
     topic_filter = TopicFilter()
 
     app = ApplicationBuilder().concurrent_updates(True).token(bot_token).build()
+
+    install_tracekit(
+        app,
+        TraceKitConfig(
+            admin_chat_id=settings.admin_chat_id,
+            sample_rate=1,
+            enable_telegram_notify=True,
+            enable_json_logs=True,
+            include_stack_text = True,
+        )
+    )
+
     app.add_handler(ChatMemberHandler(track_chats_handler, ChatMemberHandler.MY_CHAT_MEMBER))
     app.add_handler(MessageHandler(filters=filters.ALL, callback=ensure_user), group=100)
     app.add_handler(CommandHandler("start", start_command))

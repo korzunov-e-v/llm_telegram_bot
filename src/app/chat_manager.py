@@ -162,11 +162,14 @@ class ChatManager:
         await self.update_topic_info(topic_info)
 
     @staticmethod
-    def format_system_prompt(prompt, short: bool = False) -> str:
+    def format_system_prompt(prompt, short: bool = False, max_len: int = 2000) -> str:
         if prompt is None or prompt == "None" or prompt == "":
             return '<не задан>'
-        if short:
-            prompt = f"{prompt[:25]}...{prompt[-25:]}"
+        if short and len(prompt) > max_len:
+            head = prompt[:max_len]
+            tail = prompt[-25:]
+            head = head.rsplit(' ', 1)[0]  # обрезаем по слову
+            prompt = f"{head} ... {tail}"
         return f'\n```\n{prompt}\n```'
 
     async def clear_system_prompt(self, chat_id: int, topic_id: int):
