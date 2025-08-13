@@ -1,6 +1,6 @@
 [project]
 name = "llm-telegram-bot"
-version = "0.1.0"
+version = "1.2.0"
 description = "telegram bot for access LLM via chat"
 authors = ["Evgeniy Korzunov <korzunov.e.v@gmail.com>"]
 license = "MIT"

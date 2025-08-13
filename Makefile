@@ -1,3 +1,6 @@
+tag:
+	git tag v$(shell uv version --short)
+
 # PROD
 build-prod:
 	TAG=$(shell git describe --contains HEAD | sed -E 's/(^v)//')
@@ -14,6 +17,9 @@ down-prod:
 
 down-prod-mongo-express:
 	TAG=1.0.0 docker compose -f docker-compose.prod.yml down --remove-orphans mongo-express
+
+logs-prod:
+	docker compose -f docker-compose.prod.yml logs -f bot
 
 
 # DEV
@@ -35,6 +41,8 @@ down-dev:
 down-dev-mongo-express:
 	COMMIT_SHA=$(shell git rev-parse --short HEAD) docker compose -f docker-compose.dev.yml down --remove-orphans mongo-express
 
+logs-dev:
+	docker compose -f docker-compose.dev.yml logs -f bot
 
 # LOCAL
 build:
@@ -45,3 +53,6 @@ up:
 
 down:
 	docker compose -f docker-compose.local.yml down --remove-orphans
+
+logs:
+	docker compose -f docker-compose.local.yml logs -f bot
