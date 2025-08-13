@@ -1,4 +1,5 @@
 from contextlib import suppress
+import random
 
 from telegram import Update, Chat
 from telegram.constants import ParseMode
@@ -375,7 +376,28 @@ async def messages_not_allowed_handler(update: Update, _context: PTBContext) -> 
 
 
 async def noop_handler(update: Update, _context: PTBContext) -> None:
-    await update.callback_query.answer("Это номер страницы. Не нажимается.")
+    spin_vals = ["🐵", "🍄", "🏆", "💥", "⚡", "🎃", "👑", "💰", "💲", "💩"]
+    texts = [
+        "Это номер страницы",
+        "Это номер страницы.",
+        "Это номер страницы..",
+        "Это номер страницы. Он не нажимается.",
+        "фриспин!"
+    ]
+
+    user_info = await service.chat_manager.get_user_info(user_id=update.effective_user.id)
+    spin_count = user_info.spin_counter
+
+    if spin_count < len(texts):
+        await update.callback_query.answer(texts[spin_count])
+    else:
+        result = [random.choice(spin_vals) for _ in range(3)]
+        resp_text = "".join(result)
+        if len(set(result)) == 1:
+            resp_text += "\nWIN!"
+        await update.callback_query.answer(resp_text)
+    user_info.spin_counter += 1
+    await service.chat_manager.update_user(user_info)
 
 
 def build_app(bot_token: str) -> Application:

@@ -49,6 +49,7 @@ class UserInfo(BaseMongoModel):
     username: str | None
     full_name: str | None
     tokens_balance: int = Field(0)
+    spin_counter: int = Field(0)
     is_admin: bool = Field(False)
     dt_created: datetime = Field(datetime.now(UTC))
 
