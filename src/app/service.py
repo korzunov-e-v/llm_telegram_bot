@@ -2,17 +2,18 @@ import asyncio
 import traceback
 from datetime import datetime, UTC, timedelta
 
-from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import Bot, InlineKeyboardMarkup, Update
 
 from src.app.chat_manager import ChatManager
 from src.app.database import MongoManager
-from src.app.llm_provider import AnthropicLlmProvider, AbstractLlmProvider
+from src.app.llm_provider import get_llm_provider, BaseLlmProvider
 from src.app.message_repo import MessageRepository
 from src.config import settings
 from src.models import MessageModel, LlmProviderSendResponse
 from src.tools.chat_state import get_state_key, state, ChatState
 from src.tools.log import get_logger
 from src.tools.message_queue import messages_queue, get_queue_key
+from src.tools.pagination import build_list_keyboard, PageItem
 from src.tools.update_getters import UpdateInfo
 
 logger = get_logger(__name__)
@@ -21,11 +22,11 @@ logger = get_logger(__name__)
 class MessageProcessingFacade:
     def __init__(
         self,
-        llm_provider: AbstractLlmProvider,
+        llm_provider: BaseLlmProvider,
         chat_manager: ChatManager,
         message_repo: MessageRepository,
     ):
-        self.llm_provider: AbstractLlmProvider = llm_provider
+        self.llm_provider: BaseLlmProvider = llm_provider
         self.chat_manager: ChatManager = chat_manager
         self.message_repo: MessageRepository = message_repo
 
@@ -55,7 +56,7 @@ class MessageProcessingFacade:
         user_id: int,
         chat_id: int,
         topic_id: int,
-        cache: bool = None
+        cache: bool = None,
     ) -> str:
         llm_resp = await self._send_message(message_text, user_id, chat_id, topic_id, cache)
         llm_resp_text = self._get_llm_resp_str(llm_resp)
@@ -67,7 +68,7 @@ class MessageProcessingFacade:
         user_id: int,
         chat_id: int,
         topic_id: int,
-        cache: bool = None
+        cache: bool = None,
     ) -> LlmProviderSendResponse:
         if topic_id is None:
             topic_id = 1
@@ -147,9 +148,19 @@ class MessageProcessingFacade:
             logger.error(f"context was broken. {user_id=} {chat_id=} {topic_id=} {topic_settings.offset=}")
         allowed_topics = await self.chat_manager.get_allowed_topics(chat_id, user_id)
         tokens_total_input = sum(
-            [mes.tokens_message + mes.tokens_from_prov for mes in messages_records if mes.message_param.role == "user"])
+            [
+                mes.tokens_message + mes.tokens_from_prov
+                for mes in messages_records
+                if mes.message_param.role == "user"
+            ]
+        )
         tokens_total_output = sum(
-            [mes.tokens_message + mes.tokens_from_prov for mes in messages_records if mes.message_param.role == "assistant"])
+            [
+                mes.tokens_message + mes.tokens_from_prov
+                for mes in messages_records
+                if mes.message_param.role == "assistant"
+            ]
+        )
         if topic_id not in allowed_topics:
             can_reply = "Нет"
         else:
@@ -188,7 +199,7 @@ class MessageProcessingFacade:
                 reg_date=user.dt_created,
                 tokens=user.tokens_balance,
                 tokens_used=await self.chat_manager.get_tokens_used(user.user_id),
-                chats=await self.chat_manager.get_user_chat_titles(user.user_id, bot)
+                chats=await self.chat_manager.get_user_chat_titles(user.user_id, bot),
             ) for user in users
         ]
         message += "\n".join(infos)
@@ -244,18 +255,74 @@ class MessageProcessingFacade:
             logger.error(traceback.format_exc())
             return f'tg: Hello {update_info.username}\nllm: <error>'
 
-    async def get_models_keyboard(self) -> InlineKeyboardMarkup:
-        models = await self.llm_provider.get_models()
-        keyboard_models = [
-            [InlineKeyboardButton(f"{model.display_name} | {model.name}", callback_data=f"change_model+{model.name}")]
-            for model in models
-        ]
-        keyboard = keyboard_models + [[InlineKeyboardButton("Отмена", callback_data="cancel+0")]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
+    async def get_providers_keyboard(self, page: int = 0) -> InlineKeyboardMarkup:
+        """
+        Создаёт клавиатуру с пагинацией со списком провайдеров моделей.
+
+        :param page: страница пагинации.
+        :return: клавиатура InlineKeyboardMarkup.
+        """
+        providers = await self.llm_provider.get_providers_models()
+        providers_page_items = [PageItem(cb_data=p, display_name=f"{p}"[:63]) for p in providers.keys()]
+        reply_markup = build_list_keyboard(
+            items=providers_page_items,
+            page=page,
+            # per_page=98,
+            per_page=8,
+            item_cb_prefix="provider",
+            page_cb_prefix="providers",
+        )
         return reply_markup
 
-    async def change_model(self, update_info: UpdateInfo, model_name: str) -> None:
+    async def get_provider_models_keyboard(self, provider: str, page: int = 0) -> InlineKeyboardMarkup:
+        """
+        Создаёт клавиатуру с пагинацией со списком моделей от провайдера.
+
+        :param provider: id провайдера (anthropic, openai, z-ai, mistralai).
+        :param page: страница пагинации.
+        :return: клавиатура InlineKeyboardMarkup.
+        """
+        providers = await self.llm_provider.get_providers_models()
+        providers_page_items = [
+            PageItem(cb_data=p.id_hash, display_name=f"{p.name} | {p.id}"[:63])
+            for p in providers[provider]
+        ]
+        reply_markup = build_list_keyboard(
+            items=providers_page_items,
+            page=page,
+            # per_page=98,
+            per_page=8,
+            item_cb_prefix="change_model",
+            page_cb_prefix=f"provider+{provider}",
+            back_button_cb="providers+0"
+        )
+        return reply_markup
+
+    async def get_models_keyboard(self, page: int = 0) -> InlineKeyboardMarkup:
+        """
+        Создаёт клавиатуру с пагинацией со списком всех доступных моделей.
+
+        :param page: страница пагинации.
+        :return: клавиатура InlineKeyboardMarkup.
+        """
+        models = await self.llm_provider.get_models()
+        models_page_items = [PageItem(cb_data=m.id_hash, display_name=f"{m.name} | {m.id}"[:62]) for m in models]
+        models.sort(key=lambda x: x.created, reverse=True)
+
+        reply_markup = build_list_keyboard(
+            items=models_page_items,
+            page=page,
+            # per_page=98,
+            per_page=8,
+            item_cb_prefix="change_model",
+            page_cb_prefix="models",
+        )
+        return reply_markup
+
+    async def change_model(self, update_info: UpdateInfo, model_hash: str) -> str:
+        model_name = await self.llm_provider.get_model_id_by_hash(model_hash)
         await self.chat_manager.change_model(update_info.chat_id, update_info.topic_id, model_name)
+        return model_name
 
     async def prompt_command(self, update_info: UpdateInfo) -> str:
         state[get_state_key(update_info.chat_id, update_info.topic_id)] = ChatState.PROMPT
@@ -294,6 +361,9 @@ class MessageProcessingFacade:
 
         Клиент телеграм разделяет большие сообщения при отправке на меньшие, из-за этого
         в ллм отправлялась обрезанная версия, а вслед вторая часть.
+
+        :param update_info: username, full_name, user_id, chat_id, topic_id, msg_text, etc...
+        :return: Текст ответа ллм.
         """
         queue_key = get_queue_key(update_info.user_id, update_info.topic_id)
         messages = await self.wait_messages(queue_key)
@@ -303,6 +373,16 @@ class MessageProcessingFacade:
         return llm_resp_text
 
     async def delay_prompt(self, update_info: UpdateInfo) -> str:
+        """
+        Отложенное задание промпта. После первого сообщения в чате/топике ожидает новые сообщения в этот же чат.
+        После n секунд с последнего сообщения собирает все в одно и записывает в настройку промпта.
+
+        Клиент телеграм разделяет большие сообщения при отправке на меньшие, из-за этого
+        в настройки попадала обрезанная версия, а вторая часть отправлялась в ллм как сообщение.
+
+        :param update_info: username, full_name, user_id, chat_id, topic_id, msg_text, etc...
+        :return: Сообщение что промпт установлен.
+        """
         queue_key = get_queue_key(update_info.user_id, update_info.topic_id)
         state_key = get_state_key(update_info.chat_id, update_info.topic_id)
 
@@ -314,7 +394,14 @@ class MessageProcessingFacade:
         return "Промпт установлен."
 
     @staticmethod
-    async def wait_messages(queue_key: str, delay_seconds: int = 5) ->  list[str]:
+    async def wait_messages(queue_key: str, delay_seconds: int = 5) -> list[str]:
+        """
+        Ожидание новых сообщений в очереди `delay_seconds` секунд.
+
+        :param queue_key: Ключ для очереди сообщений топика, src.tools.message_queue.get_queue_key(user_id, topic_id)
+        :param delay_seconds: Сколько секунд ждать после последнего сообщения
+        :return: Список текстов сообщений
+        """
         while datetime.now() - messages_queue[queue_key][-1][1] < timedelta(seconds=delay_seconds):
             await asyncio.sleep(0.3)
         messages = messages_queue[queue_key]
@@ -325,7 +412,8 @@ class MessageProcessingFacade:
 db_provider_instance = MongoManager(settings.mongo_url)
 chat_manager_instance = ChatManager(db_provider_instance)
 message_repo_instance = MessageRepository(db_provider_instance)
-llm_provider_instance = AnthropicLlmProvider(api_key=settings.anthropic_api_key)
+llm_provider_instance = get_llm_provider(settings.llm_provider_type, settings.llm_api_key)
+
 message_processing_facade = MessageProcessingFacade(
     llm_provider=llm_provider_instance,
     message_repo=message_repo_instance,
