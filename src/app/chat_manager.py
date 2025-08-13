@@ -162,15 +162,35 @@ class ChatManager:
         await self.update_topic_info(topic_info)
 
     @staticmethod
-    def format_system_prompt(prompt, short: bool = False, max_len: int = 2000) -> str:
-        if prompt is None or prompt == "None" or prompt == "":
-            return '<не задан>'
+    def format_system_prompt(
+        prompt: str | None,
+        short: bool = False,
+        max_len: int = 2000,
+        truncation_indicator: str = " ... ",
+        tail_length: int = 25
+    ) -> str:
+        """Форматирует системный промпт для удобного отображения.
+
+        Args:
+            prompt: Исходный текст промпта (может быть None)
+            short: Сокращать длинный текст
+            max_len: Максимальная длина для сокращенного варианта
+            truncation_indicator: Что вставлять между частями при сокращении
+            tail_length: Сколько символов оставлять в конце при сокращении
+
+        Returns:
+            Отформатированная строка в markdown-блоке кода
+        """
+        if not prompt or str(prompt).strip() in ("None", ""):
+            return "<не задан>"
+        prompt = str(prompt)
         if short and len(prompt) > max_len:
-            head = prompt[:max_len]
-            tail = prompt[-25:]
-            head = head.rsplit(' ', 1)[0]  # обрезаем по слову
-            prompt = f"{head} ... {tail}"
-        return f'\n```\n{prompt}\n```'
+            head = prompt[:max_len - tail_length - len(truncation_indicator)]
+            head = head.rsplit(maxsplit=1)[0]  # Чистый разрыв по последнему слову
+            tail = prompt[-tail_length:]
+            prompt = f"{head}{truncation_indicator}{tail}"
+        return f"\n```\n{prompt}\n```\n"
+
 
     async def clear_system_prompt(self, chat_id: int, topic_id: int):
         await self.set_system_prompt(None, chat_id, topic_id)
