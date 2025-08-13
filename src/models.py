@@ -46,8 +46,8 @@ class ChatInfo(BaseMongoModel):
 
 class UserInfo(BaseMongoModel):
     user_id: int
-    username: str
-    full_name: str
+    username: str | None
+    full_name: str | None
     tokens_balance: int = Field(0)
     is_admin: bool = Field(False)
     dt_created: datetime = Field(datetime.now(UTC))
