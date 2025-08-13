@@ -9,6 +9,8 @@ services:
     env_file:
       - .env.dev
     restart: unless-stopped
+    volumes:
+      - ./src:/srv/src
 
 
   mongo:

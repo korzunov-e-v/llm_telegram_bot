@@ -27,3 +27,6 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+if settings.debug:
+    print("Settings:")
+    print(settings.model_dump_json(indent=2))
