@@ -23,8 +23,9 @@ class Settings(BaseSettings):
     llm_provider_type: LlmProviderType = Field(LlmProviderType.OPENAI)
     model_cache_ttl_sec: int = Field(5 * 60)
     extra_headers: dict | None = Field(None)
+    admin_chat_id: int | None = Field(None)
+    wait_new_message_sec: int = Field(2, description="Время в сек, сколько ждать новых сообщений в тг перед отправкой.")
     debug: bool = Field(False)
-
 
 settings = Settings()
 if settings.debug:

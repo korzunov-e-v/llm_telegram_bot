@@ -394,7 +394,7 @@ class MessageProcessingFacade:
         return "Промпт установлен."
 
     @staticmethod
-    async def wait_messages(queue_key: str, delay_seconds: int = 5) -> list[str]:
+    async def wait_messages(queue_key: str, delay_seconds: int = settings.wait_new_message_sec) -> list[str]:
         """
         Ожидание новых сообщений в очереди `delay_seconds` секунд.
 

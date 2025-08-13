@@ -1,5 +1,4 @@
 from contextlib import suppress
-from typing import TypeAlias, Any
 
 from telegram import Update, Chat
 from telegram.constants import ParseMode
@@ -11,20 +10,19 @@ from telegram.ext import (
     CallbackQueryHandler,
     ChatMemberHandler,
     Application,
-    CallbackContext,
-    ExtBot,
 )
 
 from src.app.service import message_processing_facade as service
 from src.config import settings
 from src.filters import TopicFilter
+from src.models import PTBContext
 from src.tools.chat_state import get_state_key, state, ChatState
+from src.tools.exceptions import error_handler
 from src.tools.log import get_logger, log_decorator
 from src.tools.message_queue import send_msg_as_md
 from src.tools.update_getters import get_update_info, extract_status_change
 
 logger = get_logger(__name__)
-PTBContext: TypeAlias = CallbackContext[ExtBot, dict[str, Any], dict[str, Any], dict[str, Any]]
 
 
 # COMMANDS
@@ -413,4 +411,6 @@ def build_app(bot_token: str) -> Application:
     app.add_handler(CallbackQueryHandler(button_cancel, pattern="cancel"))
     app.add_handler(CallbackQueryHandler(noop_handler, pattern="noop"))
     app.add_handler(MessageHandler(filters=filters.TEXT & ~filters.COMMAND & topic_filter, callback=text_message_handler, block=False))
+
+    app.add_error_handler(error_handler)
     return app

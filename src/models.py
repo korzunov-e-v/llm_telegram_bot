@@ -1,6 +1,6 @@
 import hashlib
 from datetime import datetime, UTC
-from typing import Optional, Literal, Any
+from typing import Optional, Literal, Any, TypeAlias
 
 from anthropic.types import ModelParam
 from bson import ObjectId
@@ -8,8 +8,11 @@ from pydantic import BaseModel, Field, ConfigDict, model_validator
 from pydantic_ai.messages import ModelResponse
 from pydantic_ai.usage import Usage
 from telegram.constants import ParseMode
+from telegram.ext import CallbackContext, ExtBot
 
 from src.config import settings
+
+PTBContext: TypeAlias = CallbackContext[ExtBot, dict[str, Any], dict[str, Any], dict[str, Any]]
 
 
 class BaseMongoModel(BaseModel):
