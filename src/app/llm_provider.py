@@ -112,7 +112,7 @@ class BaseLlmProvider(AbstractLlmProvider):
     async def get_models(self) -> list[AvailableModel]:
         if not (
             self.models_cache.models
-            or self.models_cache.updated_at < datetime.now(UTC) - timedelta(seconds=settings.model_cache_ttl_sec)
+            and self.models_cache.updated_at > datetime.now(UTC) - timedelta(seconds=settings.model_cache_ttl_sec)
         ):
             await self._update_models_cache()
         return self.models_cache.models

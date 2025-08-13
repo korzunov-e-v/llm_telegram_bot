@@ -38,7 +38,7 @@ class MessageProcessingFacade:
             reply_text = await self.temperature_command(update_info)
             return reply_text
 
-        messages_queue[queue_key].append((update_info.msg_text, datetime.now()))
+        messages_queue[queue_key].append((update_info.msg_text, datetime.now(UTC)))
         if len(messages_queue[queue_key]) == 1:
             if state.get(state_key) == ChatState.PROMPT:
                 reply_text = await self.delay_prompt(update_info)
@@ -402,7 +402,7 @@ class MessageProcessingFacade:
         :param delay_seconds: Сколько секунд ждать после последнего сообщения
         :return: Список текстов сообщений
         """
-        while datetime.now() - messages_queue[queue_key][-1][1] < timedelta(seconds=delay_seconds):
+        while datetime.now(UTC) - messages_queue[queue_key][-1][1] < timedelta(seconds=delay_seconds):
             await asyncio.sleep(0.3)
         messages = messages_queue[queue_key]
         del messages_queue[queue_key]
