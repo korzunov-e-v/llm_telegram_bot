@@ -78,14 +78,14 @@ class ChatManager:
         await self._db_provider.update_topic_info(topic_info, topic_info.chat_id)
 
     # USERS
-    async def create_new_user(self, user_id: int, username: str, full_name: str) -> UserInfo:
+    async def create_new_user(self, user_id: int, username: str | None, full_name: str) -> UserInfo:
         doc_user = self.__get_default_user_info(user_id, username, full_name)
         _doc_chat = await self.get_or_create_chat_info(user_id, user_id)
         _doc_topic = await self.get_or_create_topic_info(chat_id=user_id, topic_id=1)
         await self._db_provider.add_user(doc_user)
         return doc_user
 
-    async def get_or_create_user(self, user_id: int, username: str, full_name: str) -> UserInfo:
+    async def get_or_create_user(self, user_id: int, username: str | None, full_name: str) -> UserInfo:
         user_info = await self._db_provider.get_user_info(user_id)
         if user_info:
             return user_info
@@ -219,7 +219,7 @@ class ChatManager:
 
     # _DEFAULTS
     @staticmethod
-    def __get_default_user_info(user_id: int, username: str, full_name: str) -> UserInfo:
+    def __get_default_user_info(user_id: int, username: str | None, full_name: str) -> UserInfo:
         doc: UserInfo = UserInfo.model_construct(
             user_id=user_id,
             username=username,

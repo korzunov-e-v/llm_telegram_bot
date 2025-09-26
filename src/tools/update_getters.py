@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from telegram import Update, ChatMemberUpdated, ChatMember
 
 class UpdateInfo(BaseModel):
-    username: str
+    username: str | None
     full_name: str
     user_id: int
     chat_id: int

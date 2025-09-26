@@ -223,10 +223,10 @@ class MessageProcessingFacade:
         )
         return message
 
-    async def new_private_chat(self, user_id: int, username: str, full_name: str) -> None:
+    async def new_private_chat(self, user_id: int, username: str | None, full_name: str) -> None:
         await self.chat_manager.get_or_create_user(user_id, username, full_name)
 
-    async def new_group(self, user_id: int, username: str, full_name: str, chat_id: int) -> None:
+    async def new_group(self, user_id: int, username: str | None, full_name: str, chat_id: int) -> None:
         await self.chat_manager.get_or_create_user(user_id, username, full_name)
         await self.chat_manager.get_or_create_chat_info(chat_id, user_id)
 
@@ -249,11 +249,11 @@ class MessageProcessingFacade:
         try:
             response = await self.llm_provider.ping()
             llm_resp = response.model_response.parts[0].content
-            return f'tg: Hello {update_info.username}\nllm: {llm_resp}'
+            return f'tg: Hello {update_info.username or update_info.full_name}\nllm: {llm_resp}'
         except Exception as e:
             logger.error("hello command error: ", exc_info=e)
             logger.error(traceback.format_exc())
-            return f'tg: Hello {update_info.username}\nllm: <error>'
+            return f'tg: Hello {update_info.username or update_info.full_name}\nllm: <error>'
 
     async def get_providers_keyboard(self, page: int = 0) -> InlineKeyboardMarkup:
         """

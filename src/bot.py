@@ -61,7 +61,7 @@ async def hello_command(update: Update, _context: PTBContext) -> None:
     Проверяет, что tg бот и ллм могут принимать и отправлять сообщения.
     """
     update_info = await get_update_info(update)
-    msg = await update.message.reply_text(f'tg: Hello {update_info.username}\nllm: ...', parse_mode=ParseMode.MARKDOWN)
+    msg = await update.message.reply_text(f'tg: Hello {update_info.username or update_info.full_name}\nllm: ...', parse_mode=ParseMode.MARKDOWN)
     reply_text = await service.hello(update_info)
     await msg.edit_text(reply_text, parse_mode=ParseMode.MARKDOWN)
 
