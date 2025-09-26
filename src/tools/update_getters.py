@@ -22,7 +22,7 @@ async def get_update_info(update: Update) -> UpdateInfo:
     full_name = update.effective_user.full_name
     user_id = update.effective_user.id
     chat_id = update.effective_chat.id
-    if update.effective_message.is_topic_message:
+    if update.effective_message and update.effective_message.is_topic_message:
         topic_id = update.effective_message.message_thread_id
     else:
         topic_id = 1
